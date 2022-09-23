@@ -262,6 +262,7 @@ class GTRI_stats:
         cntTable = df.pivot_table(index='folder',columns='view',values='exp_pass',aggfunc='count')
         portionTable = sumTable.div(cntTable)
 
+        print('\n-------------- PORTION OF IMAGES OVEREXPOSED (Sample N = ' + str(200) + ') -------------------')
         print(portionTable)
 
 
