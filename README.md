@@ -1,7 +1,10 @@
 # gtri_stats
 Pulls AEI, image count, and image quality stats from folder structure
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 0278406e83291406827cbceb91d3a82ef426b2f7
 ------------------------ AEI DATA ------------------------
                        carSpeed
                            size  mean amax amin ptp
@@ -18,4 +21,8 @@ Train_2022_09_01_01_27       58   8.2   11    2   9
 Train_2022_09_02_03_52        1  11.0   11   11   0
 Train_2022_09_02_04_17       38  10.9   14    8   6
 Train_2022_09_02_05_26       80  12.2   16    5  11
+<<<<<<< HEAD
 Train_2022_09_02_14_52      144  19.0   20   19   1
+=======
+Train_2022_09_02_14_52      144  19.0   20   19   1
+>>>>>>> 0278406e83291406827cbceb91d3a82ef426b2f7
