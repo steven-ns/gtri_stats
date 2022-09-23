@@ -9,12 +9,19 @@ from datetime import timedelta
 #from multiprocessing import ThreadPool
 from multiprocessing import Pool
 import random
+from datetime import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
+import itertools
+
 
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
 
 MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 #MASTER_FOLDER = 'X:/'
+
+N_SAMPLES = 200
 
 FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information']
 
@@ -23,50 +30,94 @@ class GTRI_stats:
     def __init__(self,startDate):
         self.startDate = startDate
 
+
     def parse_aei(self,aei_path):
         
         aeiFile = open(aei_path, 'r')
         aeiLines = aeiFile.readlines()
         speedArray = []
+        indexArray = []
+        idx = 0
         for lineStr in aeiLines[1:]:    #Skip first line of file
             C = lineStr.split('*')
             if len(C) == 15:        # Process only well formatted line 
                 speedArray.append(int(C[12]))
-        return speedArray # Array with Speed Data
+                idx = idx + 1
+                indexArray.append(idx)
+        return speedArray,indexArray # Array with Speed Data
     
+
     def aei_stats(self):
 
         pd.set_option("display.precision", 1)
 
         folderArray = []
         speedArray = []
+        indexArray = []
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+
+        for f in dirsInFolder:
+
+            if f in FOLDER_IGNORE_LIST:
+                dirsInFolder.remove(f)
+                continue
 
         #Loop Through All folders, if aei file, then add to array
 
         for f in dirsInFolder:
             aeiPath = MASTER_FOLDER + f + '/' + 'aeiData.txt'
             if os.path.exists(aeiPath):
-                aeiSpeeds = self.parse_aei(aeiPath)
+                aeiSpeeds,aeiIndex = self.parse_aei(aeiPath)
                 speedArray.extend(aeiSpeeds)
+                indexArray.extend(aeiIndex)
                 folderArray.extend([f] * len(aeiSpeeds))            
             else:
                 print("Missing AEI Data: " + f)
 
-        #Print Stats
+        #Print AEI Stats
         d={
             'carSpeed': speedArray,
-            'folder': folderArray
+            'folder': folderArray,
+            'trainIndex':indexArray
         }
 
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
         print('------------------------ AEI DATA ------------------------')
-        print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))       
+        print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
+
+        return df 
     
+
     def get_file_count(self, folder_path):
-        return len([entry for entry in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, entry))])
+        
+        allFiles = [entry for entry in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, entry))]
+        allTimes = []
+
+        for f in allFiles:
+
+            D = f.split('_')
+            
+            splitLength = D[0].split('-')
+            
+            if len(splitLength) == 4:
+                E = D[0].split('-')
+                time_str = E[0] + '-' + E[1] + '-' + E[2] + ' ' + E[3][0:2] +  ':' + E[3][2:4] + ':' + E[3][4:6] + '.' + E[3][6:9]
+            elif len(splitLength) == 5:
+                E = D[0].split('-')
+                time_str = E[0] + '-' + E[1] + '-' + E[2] + ' ' + E[3][0:2] +  ':' + E[3][2:4] + ':' + E[3][4:6] + '.' + E[4]
+            else:
+                E = D[1].split('-')
+                time_str = E[0] + '-' + E[1] + '-' + E[2] + ' ' + E[3][0:2] +  ':' + E[3][2:4] + ':' + E[3][4:6] + '.' + E[4]
+            
+            a = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S.%f')
+            allTimes.append(a)
+            #print(a)
+
+
+        return len(allFiles), allTimes
     
+
     def file_count_stats(self):
         
         print('\n------------------------ VIEW COUNTS ------------------------')
@@ -75,8 +126,18 @@ class GTRI_stats:
         viewArray = []
         countArray = []
 
+        folderArrayFPS = []
+        viewArrayFPS = []
+        timeArrayFPS = []        
+
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+
+        for f in dirsInFolder:
+
+            if f in FOLDER_IGNORE_LIST:
+                dirsInFolder.remove(f)
+                continue
 
         #Loop Through All folders, if aei file, then add to array
 
@@ -90,12 +151,18 @@ class GTRI_stats:
             for view in viewsInFolder:
                 fullPath = MASTER_FOLDER + f + '/' + view
 
-                fileCnt = self.get_file_count(fullPath)
+                fileCnt,allTimes = self.get_file_count(fullPath)
 
+                #Folder Count Summary
                 folderArray.append(f)
                 viewArray.append(view)
                 countArray.append(fileCnt)
-        
+
+                #FPS Summary Info
+                folderArrayFPS.extend([f] * len(allTimes))
+                viewArrayFPS.extend([view] * len(allTimes))
+                timeArrayFPS.extend(allTimes)  
+
         #Print Stats
         d={
             'view': viewArray,
@@ -105,7 +172,19 @@ class GTRI_stats:
 
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
         print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
+
+        #FPS Dataframe
+        d={
+            'view': viewArrayFPS,
+            'folder': folderArrayFPS,
+            'datetime': timeArrayFPS
+        }
+
+        dfFPS = pd.DataFrame.from_dict(d,orient='index').transpose()
+        return dfFPS
+
         #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))           
+
 
     def image_stats(self):
         
@@ -120,6 +199,12 @@ class GTRI_stats:
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+
+        for f in dirsInFolder:
+
+            if f in FOLDER_IGNORE_LIST:
+                dirsInFolder.remove(f)
+                continue
 
         #Loop Through All folders, if aei file, then add to array
 
@@ -171,10 +256,7 @@ class GTRI_stats:
 
         print(portionTable)
 
-
-        #return df
-        #print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
-        #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))             
+          
 
     def get_img_stats(self,f):
         folderArray = []
@@ -195,7 +277,7 @@ class GTRI_stats:
             #Shuffle file_names
             random.shuffle(file_names)
             #n_samples = np.min(100,len(file_names))
-            n_samples = 200
+            n_samples = N_SAMPLES
             cnt = 0
             for fn in file_names:
 
@@ -262,16 +344,84 @@ class GTRI_stats:
         cntTable = df.pivot_table(index='folder',columns='view',values='exp_pass',aggfunc='count')
         portionTable = sumTable.div(cntTable)
 
-        print('\n-------------- PORTION OF IMAGES OVEREXPOSED (Sample N = ' + str(200) + ') -------------------')
+        print('\n-------------- PORTION OF IMAGES OVEREXPOSED (Sample N = ' + str(N_SAMPLES) + ') -------------------')
         print(portionTable)
+
+
+    def plot_FPS(self,aeiDf,dfFPS):
+
+        palette = itertools.cycle(sns.color_palette())
+        pd.options.mode.chained_assignment = None
+        sns.set()
+        sns.set(font_scale=0.8)
+        plt.rcParams["figure.figsize"] = (15,8)
+        fig, axes = plt.subplots(3, 5)
+
+        colorDict = {
+        "Isometric": "r",
+        "side_bottom": "g"
+        }
+
+        maxSpeed = aeiDf['carSpeed'].max()
+
+        #f = 'Train_2022_08_29_22_31'
+        axCnt = 0
+        for f in aeiDf['folder'].unique()[0:15]:
+            axCnt = axCnt + 1
+            axLive = plt.subplot(3, 5, axCnt)
+            select = aeiDf['folder'] == f
+            subAeiDf = aeiDf[select]
+            #print(subAeiDf)
+
+            sns.lineplot(data=subAeiDf, x="trainIndex", y="carSpeed", color="b",ax=axLive).set(title=f)
+            axLive.set(ylim=(0, maxSpeed))
+            #axLive.ylabel("carSpeed",color="b")
+            axLive.yaxis.label.set_color('b')
+
+            ax2 = axLive.twinx()
+            color=next(palette) #remove blue
+            ax2.set(ylim=(0, 25))
+            for view in dfFPS['view'].unique():
+                #view = 'side_bottom'
+                select = (dfFPS['folder'] == f) & (dfFPS['view'] == view)
+                subDfFPS = dfFPS[select]
+                #subDfFPS = subDfFPS.reset_index(drop=True, inplace=True)
+                #print(subDfFPS)
+                #subDfFPS['delta'] = (subDfFPS['datetime']-subDfFPS['datetime'].shift()).fillna(pd.Timedelta('0 days'))
+                subDfFPS['delta'] = subDfFPS['datetime'].diff().dt.microseconds
+                subDfFPS =  subDfFPS.assign(FPS = lambda x: (1000000/x['delta']))
+                subDfFPS.index = pd.RangeIndex(len(subDfFPS.index))
+                #print(subDfFPS)
+
+                #print("Length:",len(subAeiDf))
+                x = len(subAeiDf)*subDfFPS.index.to_numpy()/len(subDfFPS.index.to_numpy())
+
+                #ax2 = plt.twinx()
+                #ax2.set(ylim=(0, 40))
+                sns.lineplot(data=subDfFPS, x=x, y="FPS",color=colorDict[view],ax=ax2,label=view)
+
+                ax2.legend([],[], frameon=False)
+                #ax2.grid(None)
+                ax2.grid(False)
+        
+        # ax2.legend()
+        plt.tight_layout()
+        plt.show()        
+
+        #plt.plot([1, 2, 3, 4])
+        #plt.ylabel('some numbers')
+        #plt.show()
+        #print("TEST")
 
 
     def run(self):
         
-        self.aei_stats()
-        self.file_count_stats()
-        #self.image_stats()
+        aeiDf = self.aei_stats()
+        dfFPS = self.file_count_stats()
         self.image_stats_multi()
+        self.plot_FPS(aeiDf,dfFPS)
+        #self.image_stats()
+        #self.image_stats_multi()
 
 
 
