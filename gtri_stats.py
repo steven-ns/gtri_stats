@@ -11,6 +11,7 @@ from multiprocessing import Pool
 import random
 
 pd.set_option("display.precision", 1)
+pd.set_option('display.max_rows', None)
 
 MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 #MASTER_FOLDER = 'X:/'
