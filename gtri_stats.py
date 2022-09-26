@@ -20,6 +20,8 @@ pd.set_option('display.max_rows', None)
 
 MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 #MASTER_FOLDER = 'X:/'
+#MASTER_FOLDER = 'X:/Left to Right Trains/'
+#MASTER_FOLDER = 'X:/Right to Left Trains/'
 
 N_SAMPLES = 200
 
@@ -45,7 +47,18 @@ class GTRI_stats:
                 idx = idx + 1
                 indexArray.append(idx)
         return speedArray,indexArray # Array with Speed Data
-    
+
+    def get_daypart(self,folder_name):
+        
+        E = folder_name.split('_')
+        time_str = E[1] + '-' + E[2] + '-' + E[3] + ' ' + E[4] +  ':' + E[5]
+        a = datetime.strptime(time_str, '%Y-%m-%d %H:%M')
+        if (a.hour > 6) and (a.hour < 20):
+            dayPart = 'Daytime'
+        else:
+            dayPart = 'Nighttime'            
+
+        return dayPart # Array with Speed Data    
 
     def aei_stats(self):
 
@@ -54,6 +67,7 @@ class GTRI_stats:
         folderArray = []
         speedArray = []
         indexArray = []
+        daypartArray = []
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
 
@@ -71,7 +85,8 @@ class GTRI_stats:
                 aeiSpeeds,aeiIndex = self.parse_aei(aeiPath)
                 speedArray.extend(aeiSpeeds)
                 indexArray.extend(aeiIndex)
-                folderArray.extend([f] * len(aeiSpeeds))            
+                folderArray.extend([f] * len(aeiSpeeds))
+                daypartArray.extend([self.get_daypart(f)] * len(aeiSpeeds))             
             else:
                 print("Missing AEI Data: " + f)
 
@@ -79,12 +94,15 @@ class GTRI_stats:
         d={
             'carSpeed': speedArray,
             'folder': folderArray,
-            'trainIndex':indexArray
+            'trainIndex':indexArray,
+            'daypart': daypartArray
         }
 
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
         print('------------------------ AEI DATA ------------------------')
-        print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
+        #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
+        print(df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
+        #umTable = df.pivot_table(index=['daypart','folder'],columns='view',values='exp_pass',aggfunc='sum')
 
         return df 
     
@@ -120,11 +138,13 @@ class GTRI_stats:
 
     def file_count_stats(self):
         
+        pd.set_option("display.precision", 0)
         print('\n------------------------ VIEW COUNTS ------------------------')
 
         folderArray = []
         viewArray = []
         countArray = []
+        daypartArray = []
 
         folderArrayFPS = []
         viewArrayFPS = []
@@ -157,6 +177,7 @@ class GTRI_stats:
                 folderArray.append(f)
                 viewArray.append(view)
                 countArray.append(fileCnt)
+                daypartArray.append(self.get_daypart(f))
 
                 #FPS Summary Info
                 folderArrayFPS.extend([f] * len(allTimes))
@@ -167,11 +188,13 @@ class GTRI_stats:
         d={
             'view': viewArray,
             'folder': folderArray,
-            'fileCnt': countArray
+            'fileCnt': countArray,
+            'daypart': daypartArray,
         }
 
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
-        print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
+        #print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
+        print(df.pivot_table(columns='view',values='fileCnt',index=['daypart','folder']))
 
         #FPS Dataframe
         d={
@@ -282,8 +305,10 @@ class GTRI_stats:
             for fn in file_names:
 
                 fullImagePath = fullPath + '/' + fn
-
-                vals = np.asarray(Image.open(fullImagePath))
+                try:
+                    vals = np.asarray(Image.open(fullImagePath))
+                except:
+                    continue
                 counts, bins = np.histogram(vals, range(257))
                 counts = counts/np.sum(counts)
                 p255 = counts[-1]
@@ -309,6 +334,8 @@ class GTRI_stats:
         folderArray = []
         viewArray = []
         clipArray = []
+
+        #daypartArray.append(self.get_daypart(f))
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
@@ -340,8 +367,13 @@ class GTRI_stats:
         df['exp_pass'] = df.apply(lambda row: row.pClipped > 0.05, axis=1)
         df['exp_pass'] = df['exp_pass'].astype(int)
 
-        sumTable = df.pivot_table(index='folder',columns='view',values='exp_pass',aggfunc='sum')
-        cntTable = df.pivot_table(index='folder',columns='view',values='exp_pass',aggfunc='count')
+        df['daypart'] = df.apply(lambda row: self.get_daypart(row.folder), axis=1)
+
+        #sumTable = df.pivot_table(index='folder',columns='view',values='exp_pass',aggfunc='sum')
+        #cntTable = df.pivot_table(index='folder',columns='view',values='exp_pass',aggfunc='count')
+
+        sumTable = df.pivot_table(index=['daypart','folder'],columns='view',values='exp_pass',aggfunc='sum')
+        cntTable = df.pivot_table(index=['daypart','folder'],columns='view',values='exp_pass',aggfunc='count')
         portionTable = sumTable.div(cntTable)
 
         print('\n-------------- PORTION OF IMAGES OVEREXPOSED (Sample N = ' + str(N_SAMPLES) + ') -------------------')
@@ -420,8 +452,7 @@ class GTRI_stats:
         dfFPS = self.file_count_stats()
         self.image_stats_multi()
         self.plot_FPS(aeiDf,dfFPS)
-        #self.image_stats()
-        #self.image_stats_multi()
+
 
 
 
