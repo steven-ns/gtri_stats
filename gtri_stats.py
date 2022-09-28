@@ -25,7 +25,8 @@ MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 
 N_SAMPLES = 200
 
-FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information']
+#FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information']
+FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','Left to Right Trains','Right to Left Trains']
 
 class GTRI_stats:
 
@@ -70,12 +71,7 @@ class GTRI_stats:
         daypartArray = []
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
-
-        for f in dirsInFolder:
-
-            if f in FOLDER_IGNORE_LIST:
-                dirsInFolder.remove(f)
-                continue
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
 
         #Loop Through All folders, if aei file, then add to array
 
@@ -152,12 +148,7 @@ class GTRI_stats:
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
-
-        for f in dirsInFolder:
-
-            if f in FOLDER_IGNORE_LIST:
-                dirsInFolder.remove(f)
-                continue
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
 
         #Loop Through All folders, if aei file, then add to array
 
@@ -222,12 +213,7 @@ class GTRI_stats:
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
-
-        for f in dirsInFolder:
-
-            if f in FOLDER_IGNORE_LIST:
-                dirsInFolder.remove(f)
-                continue
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
 
         #Loop Through All folders, if aei file, then add to array
 
@@ -339,7 +325,8 @@ class GTRI_stats:
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
-
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+        
         for f in dirsInFolder:
 
             if f in FOLDER_IGNORE_LIST:
@@ -417,6 +404,7 @@ class GTRI_stats:
                 #view = 'side_bottom'
                 select = (dfFPS['folder'] == f) & (dfFPS['view'] == view)
                 subDfFPS = dfFPS[select]
+                subDfFPS = subDfFPS.sort_values(by=['datetime'])
                 #subDfFPS = subDfFPS.reset_index(drop=True, inplace=True)
                 #print(subDfFPS)
                 #subDfFPS['delta'] = (subDfFPS['datetime']-subDfFPS['datetime'].shift()).fillna(pd.Timedelta('0 days'))
