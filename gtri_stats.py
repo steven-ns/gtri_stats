@@ -13,6 +13,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 import itertools
+import cv2
 
 
 pd.set_option("display.precision", 1)
@@ -451,20 +452,134 @@ class GTRI_stats:
         
         # ax2.legend()
         plt.tight_layout()
-        plt.show()        
+        plt.show()
 
         #plt.plot([1, 2, 3, 4])
         #plt.ylabel('some numbers')
         #plt.show()
         #print("TEST")
+    
+    def get_direction(self,folder):
+
+        file_names = [fn for fn in os.listdir(folder) if fn.endswith('jpeg') ]
+        print(folder,len(file_names))
+
+        if len(file_names) < 1:
+            return 0
+
+        show_video = False
+        if len(file_names) > 150:
+            start_frame = 100
+            end_frame = 150
+        else:
+            start_frame = 0
+            end_frame = len(file_names)
+
+        old_frame = cv2.imread(folder+file_names[start_frame])
+        old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
+
+        #First Features
+        #sift = cv2.xfeatures2d.SIFT_create(contrastThreshold = 0.04)
+        sift = cv2.SIFT_create(contrastThreshold = 0.04)
+        keypoints_1, descriptors_1 = sift.detectAndCompute(old_gray,None)
+
+        color = np.random.randint(0, 255, (100, 3))
+        avgDist = []
+
+        for i in range(start_frame+1,end_frame):
+
+            frame = cv2.imread(folder+file_names[i])
+            frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            keypoints_2, descriptors_2 = sift.detectAndCompute(frame_gray,None)
+            
+            #feature matching
+            try:
+                bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
+                matches = bf.match(descriptors_1,descriptors_2)
+                matches = sorted(matches, key = lambda x:x.distance)
+            except:
+                continue
+            
+            #Calculate Distance
+            x_dst = []
+            for match in matches:
+                p1 = keypoints_1[match.queryIdx].pt
+                p2 = keypoints_2[match.trainIdx].pt
+                x_dst.append(p2[0]-p1[0])
+            
+            if len(x_dst) > 0:
+                avgDist.append(np.mean(np.array(x_dst)))
+
+            #Show window
+            if show_video:
+
+                img3 = cv2.drawMatches(old_gray, keypoints_1, frame_gray, keypoints_2, matches[:50], frame_gray, flags=2)
+                cv2.imshow("frame", img3)
+                k = cv2.waitKey(25) & 0xFF
+                if k == 27:
+                    break
+
+            #Copy to old for next iter
+            old_gray = frame_gray.copy()
+            keypoints_1 = keypoints_2 
+            descriptors_1 = descriptors_2
+
+        #print(avgDist)
+        #print("Direction: ",np.mean(np.array(avgDist)))
+
+        return np.mean(np.array(avgDist))
+
+    def get_direction_summary(self):
+        
+        print('\n----------------- DIRECTION CALCS ---------------------')
+
+        dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+        dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+
+        trainName = []
+        trainDirection = []
+        daypartArray = []
+
+        for f in dirsInFolder:
+            dirResult = 'NaN'
+            iso_folder = MASTER_FOLDER + f + '/Isometric/'
+            #print(iso_folder)
+            dirVal = self.get_direction(iso_folder)
+            if dirVal < 0:
+                dirResult = 'Left'
+            if dirVal > 0:
+                dirResult = 'Right'
+            
+            trainName.append(f)
+            trainDirection.append(dirResult)
+            daypartArray.append(self.get_daypart(f))
+        
+        #Print Stats
+        d={
+            'folder': trainName,
+            'direction': trainDirection,
+            'daypart':daypartArray
+        }
+
+        df = pd.DataFrame.from_dict(d,orient='index').transpose()
+        #print(df.groupby(['daypart','folder'])['direction'].agg(pd.Series.mode))
+        print('\n----------------- DIRECTION OF TRAIN, ISOMETRIC ---------------------')
+        print(df.groupby(['daypart','folder']).agg(pd.Series.mode))
+        #print(df)
+        #dirTable = df.pivot_table(index=['daypart','folder'],columns='view',values='exp_pass',aggfunc='sum')
+        #dirTable = df.pivot_table(index=['daypart','folder'],columns='direction',values='direction')
+        #print(dirTable)    
 
 
     def run(self):
         
         aeiDf = self.aei_stats()
         dfFPS = self.file_count_stats()
-        #self.image_stats_multi()
-        #self.plot_FPS(aeiDf,dfFPS)
+        self.get_direction_summary()
+        self.image_stats_multi()
+        self.plot_FPS(aeiDf,dfFPS)
 
 
 
