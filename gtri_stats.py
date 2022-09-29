@@ -38,16 +38,29 @@ class GTRI_stats:
         
         aeiFile = open(aei_path, 'r')
         aeiLines = aeiFile.readlines()
+        
         speedArray = []
         indexArray = []
+        axelArray = []
+        EOC_detect = 0
+        EOT_detect = 0
+
         idx = 0
         for lineStr in aeiLines[1:]:    #Skip first line of file
             C = lineStr.split('*')
+
+            if C[0] == 'EOT':
+                EOT_detect = 1
+
+            if C[0] == 'EOC':
+                EOC_detect = 1
+
             if len(C) == 15:        # Process only well formatted line 
                 speedArray.append(int(C[12]))
+                axelArray.append(int(C[13]))
                 idx = idx + 1
                 indexArray.append(idx)
-        return speedArray,indexArray # Array with Speed Data
+        return speedArray,indexArray,axelArray,EOT_detect,EOC_detect # Array with Speed Data
 
     def get_daypart(self,folder_name):
         
@@ -69,6 +82,9 @@ class GTRI_stats:
         speedArray = []
         indexArray = []
         daypartArray = []
+        axelArray = []
+        EOC_array = []
+        EOT_array = []
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
@@ -78,11 +94,17 @@ class GTRI_stats:
         for f in dirsInFolder:
             aeiPath = MASTER_FOLDER + f + '/' + 'aeiData.txt'
             if os.path.exists(aeiPath):
-                aeiSpeeds,aeiIndex = self.parse_aei(aeiPath)
+                aeiSpeeds,aeiIndex,axelCnt,EOT_detect,EOC_detect = self.parse_aei(aeiPath)
                 speedArray.extend(aeiSpeeds)
                 indexArray.extend(aeiIndex)
+                axelArray.extend(axelCnt)
                 folderArray.extend([f] * len(aeiSpeeds))
-                daypartArray.extend([self.get_daypart(f)] * len(aeiSpeeds))             
+                daypartArray.extend([self.get_daypart(f)] * len(aeiSpeeds))
+
+                EOC_array.extend([EOC_detect] * len(aeiSpeeds)) 
+                EOT_array.extend([EOT_detect] * len(aeiSpeeds)) 
+
+
             else:
                 print("Missing AEI Data: " + f)
 
@@ -91,13 +113,16 @@ class GTRI_stats:
             'carSpeed': speedArray,
             'folder': folderArray,
             'trainIndex':indexArray,
-            'daypart': daypartArray
+            'daypart': daypartArray,
+            'axelCnt':axelArray,
+            'EOC':EOC_array,
+            'EOT':EOT_array
         }
 
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
         print('------------------------ AEI DATA ------------------------')
         #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
-        print(df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
+        print(df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp],'axelCnt' : [np.sum],'EOC' : [np.max],'EOT' : [np.max]}))
         #umTable = df.pivot_table(index=['daypart','folder'],columns='view',values='exp_pass',aggfunc='sum')
 
         return df 
@@ -326,7 +351,7 @@ class GTRI_stats:
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
         dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
-        
+
         for f in dirsInFolder:
 
             if f in FOLDER_IGNORE_LIST:
@@ -438,8 +463,8 @@ class GTRI_stats:
         
         aeiDf = self.aei_stats()
         dfFPS = self.file_count_stats()
-        self.image_stats_multi()
-        self.plot_FPS(aeiDf,dfFPS)
+        #self.image_stats_multi()
+        #self.plot_FPS(aeiDf,dfFPS)
 
 
 
