@@ -19,15 +19,17 @@ import cv2
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
 
-MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
+#MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 #MASTER_FOLDER = 'X:/'
 #MASTER_FOLDER = 'X:/Left to Right Trains/'
-#MASTER_FOLDER = 'X:/Right to Left Trains/'
+MASTER_FOLDER = 'X:/Right to Left Trains/'
 
 N_SAMPLES = 200
 
 #FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information']
-FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','Left to Right Trains','Right to Left Trains']
+#FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','Left to Right Trains','Right to Left Trains']
+FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','2022-09-30-1058_omron','2022-09-30-1058','Left to Right Trains','Right to Left Trains','2022-09-30-0847','2022-09-30-0855','2022-09-30-1025','2022-09-30-1025_omron']
+
 
 class GTRI_stats:
 
@@ -132,10 +134,13 @@ class GTRI_stats:
     def get_file_count(self, folder_path):
         
         allFiles = [entry for entry in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, entry))]
+        allFiles = [entry for entry in allFiles if entry != 'Thumbs.db']
         allTimes = []
-
+        
+        #print(folder_path)
+        
         for f in allFiles:
-
+            
             D = f.split('_')
             
             splitLength = D[0].split('-')
@@ -149,9 +154,11 @@ class GTRI_stats:
             else:
                 E = D[1].split('-')
                 time_str = E[0] + '-' + E[1] + '-' + E[2] + ' ' + E[3][0:2] +  ':' + E[3][2:4] + ':' + E[3][4:6] + '.' + E[4]
+
             
             a = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S.%f')
             allTimes.append(a)
+            last_time_str = time_str
             #print(a)
 
 
@@ -407,7 +414,7 @@ class GTRI_stats:
         "side_bottom": "g"
         }
 
-        maxSpeed = aeiDf['carSpeed'].max()
+        maxSpeed = aeiDf['carSpeed'].max() + 5
 
         #f = 'Train_2022_08_29_22_31'
         axCnt = 0
@@ -418,19 +425,25 @@ class GTRI_stats:
             subAeiDf = aeiDf[select]
             #print(subAeiDf)
 
-            sns.lineplot(data=subAeiDf, x="trainIndex", y="carSpeed", color="b",ax=axLive).set(title=f)
+            sns.lineplot(data=subAeiDf, x="trainIndex", y="carSpeed", color="b",ax=axLive,zorder=100).set(title=f)
             axLive.set(ylim=(0, maxSpeed))
+            plt.setp(axLive.lines, zorder=100)
             #axLive.ylabel("carSpeed",color="b")
             axLive.yaxis.label.set_color('b')
-
+            
             ax2 = axLive.twinx()
             color=next(palette) #remove blue
             ax2.set(ylim=(0, 25))
             for view in dfFPS['view'].unique():
+                
+                if view in colorDict.keys():
+                    pass
+                else:
+                    continue
+            
                 #view = 'side_bottom'
                 select = (dfFPS['folder'] == f) & (dfFPS['view'] == view)
                 subDfFPS = dfFPS[select]
-                subDfFPS = subDfFPS.sort_values(by=['datetime'])
                 #subDfFPS = subDfFPS.reset_index(drop=True, inplace=True)
                 #print(subDfFPS)
                 #subDfFPS['delta'] = (subDfFPS['datetime']-subDfFPS['datetime'].shift()).fillna(pd.Timedelta('0 days'))
@@ -444,7 +457,7 @@ class GTRI_stats:
 
                 #ax2 = plt.twinx()
                 #ax2.set(ylim=(0, 40))
-                sns.lineplot(data=subDfFPS, x=x, y="FPS",color=colorDict[view],ax=ax2,label=view)
+                sns.lineplot(data=subDfFPS, x=x, y="FPS",color=colorDict[view],ax=ax2,label=view,zorder=0,alpha  = 0.5)
 
                 ax2.legend([],[], frameon=False)
                 #ax2.grid(None)
@@ -468,14 +481,14 @@ class GTRI_stats:
             return 0
 
         show_video = False
-        if len(file_names) > 150:
-            start_frame = 100
-            end_frame = 150
+        if len(file_names) > 25:
+            start_frame = int(len(file_names)/2)
+            end_frame = start_frame + 10
         else:
-            start_frame = 0
-            end_frame = len(file_names)
+            return 0
 
         old_frame = cv2.imread(folder+file_names[start_frame])
+        old_frame = cv2.resize(old_frame, (400, 346)) 
         old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
 
         #First Features
@@ -489,6 +502,7 @@ class GTRI_stats:
         for i in range(start_frame+1,end_frame):
 
             frame = cv2.imread(folder+file_names[i])
+            frame = cv2.resize(frame, (400, 346)) 
             frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
             keypoints_2, descriptors_2 = sift.detectAndCompute(frame_gray,None)
