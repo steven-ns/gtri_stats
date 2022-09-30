@@ -14,15 +14,16 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import itertools
 import cv2
+from scipy.signal import find_peaks
 
 
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
 
-#MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
+MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 #MASTER_FOLDER = 'X:/'
 #MASTER_FOLDER = 'X:/Left to Right Trains/'
-MASTER_FOLDER = 'X:/Right to Left Trains/'
+#MASTER_FOLDER = 'X:/Right to Left Trains/'
 
 N_SAMPLES = 200
 
@@ -581,19 +582,104 @@ class GTRI_stats:
         #print(df.groupby(['daypart','folder'])['direction'].agg(pd.Series.mode))
         print('\n----------------- DIRECTION OF TRAIN, ISOMETRIC ---------------------')
         print(df.groupby(['daypart','folder']).agg(pd.Series.mode))
+
+        return df
         #print(df)
         #dirTable = df.pivot_table(index=['daypart','folder'],columns='view',values='exp_pass',aggfunc='sum')
         #dirTable = df.pivot_table(index=['daypart','folder'],columns='direction',values='direction')
         #print(dirTable)    
 
+    def get_intensity_ts(self,isLeft,folder):
+
+        file_names = [fn for fn in os.listdir(folder) if fn.endswith('jpeg') ]
+        print(folder,len(file_names))
+
+        if len(file_names) < 1:
+            return 0
+
+        imgSumArray = []
+        locArray = []
+
+        for i in range(0,len(file_names)):
+            #print(i)
+            frame = cv2.imread(folder+file_names[i])
+            imgSumArray.append(np.average(frame, axis=0)[0][0])
+            locArray.append(i)
+        
+        signal_ts = np.array(imgSumArray)
+        loc = np.array(locArray)
+
+        peaks, properties = find_peaks(-signal_ts, prominence=10, width=1, rel_height=0.9, distance=15)
+
+        #Plot Signal
+        fig, ax = plt.subplots(figsize = (14,7))
+        plt.plot(loc,signal_ts)
+
+        for i in range(0,len(peaks)):
+            plt.text(loc[peaks[i]]-15, signal_ts[peaks[i]]-1, str(i+1), fontsize = 10,color = 'red')
+        plt.show()
+
+        #print(peaks)
+
+        #Plot Collage of Images
+
+        W = 10*400
+        H = 8*346
+
+        collage = Image.new("RGB", (W,H))
+        cnt = -1
+        maxImgCnt = min(len(peaks),80)-1
+
+        for i in range(0,W,400):
+            for j in range(0,H,346):
+                cnt = cnt + 1
+
+                if cnt >= maxImgCnt:
+                    break
+                
+                if isLeft:
+                    fullImgPath = folder + file_names[peaks[cnt]-3]
+                else:
+                    fullImgPath = folder + file_names[peaks[cnt]+3]
+                img = Image.open(fullImgPath)
+                img = img.resize((400,346))
+
+                collage.paste(img, (i,j))
+        
+        collage.show()
+
+    def process_intensity(self,dfDirection):
+
+        print('\n----------------- INTENSITY PROCESSING ---------------------')
+
+        for i in range(len(dfDirection)):
+
+            f = dfDirection['folder'].iloc[i]
+            direction = dfDirection['direction'].iloc[i]
+
+            print(f,direction)
+
+            fullFolderPath = MASTER_FOLDER + dfDirection['folder'].iloc[i] + '/Isometric/'
+
+            if direction == 'Left':                
+                self.get_intensity_ts(True,fullFolderPath)
+            elif direction == 'Right':
+                self.get_intensity_ts(False,fullFolderPath)
+            else:
+                pass
+
 
     def run(self):
         
-        aeiDf = self.aei_stats()
-        dfFPS = self.file_count_stats()
-        self.get_direction_summary()
-        self.image_stats_multi()
-        self.plot_FPS(aeiDf,dfFPS)
+        #aeiDf = self.aei_stats()
+        #self.get_intensity_ts('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_30_00_21/Isometric/')
+        #aeiDf = self.aei_stats()
+        #dfFPS = self.file_count_stats()
+        dfDirection = self.get_direction_summary()
+        self.process_intensity(dfDirection)
+        #self.get_intensity_ts(False,'C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_30_00_21/Isometric/')
+        #self.image_stats_multi()
+        #self.plot_FPS(aeiDf,dfFPS)
 
 
 
