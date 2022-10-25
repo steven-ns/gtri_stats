@@ -15,7 +15,8 @@ import seaborn as sns
 import itertools
 import cv2
 from scipy.signal import find_peaks
-
+import shutil
+from tabulate import tabulate
 
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
@@ -25,12 +26,15 @@ MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 #MASTER_FOLDER = 'X:/Left to Right Trains/'
 #MASTER_FOLDER = 'X:/Right to Left Trains/'
 
+SAVE_FOLDER = 'C:/Users/KSH06/Desktop/SAVES/'
+
 N_SAMPLES = 200
 
 #FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information']
 #FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','Left to Right Trains','Right to Left Trains']
 FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','2022-09-30-1058_omron','2022-09-30-1058','Left to Right Trains','Right to Left Trains','2022-09-30-0847','2022-09-30-0855','2022-09-30-1025','2022-09-30-1025_omron']
 
+#TODO: Add code for ignore folders that don't start with Train_; or to select only from certain day
 
 class GTRI_stats:
 
@@ -69,7 +73,7 @@ class GTRI_stats:
     def get_daypart(self,folder_name):
         
         E = folder_name.split('_')
-        time_str = E[1] + '-' + E[2] + '-' + E[3] + ' ' + E[4] +  ':' + E[5]
+        time_str = E[1] + '-' + E[2] + '-' + E[3] + ' ' + E[4] +  ':' + E[5][0:2]
         a = datetime.strptime(time_str, '%Y-%m-%d %H:%M')
         if (a.hour > 6) and (a.hour < 20):
             dayPart = 'Daytime'
@@ -124,10 +128,16 @@ class GTRI_stats:
         }
 
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
+        #TODO: Set data types
+
         print('------------------------ AEI DATA ------------------------')
         #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
-        print(df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp],'axelCnt' : [np.sum],'EOC' : [np.max],'EOT' : [np.max]}))
+        #print(df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp],'axelCnt' : [np.sum],'EOC' : [np.max],'EOT' : [np.max]}))
+        pDf = df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp],'axelCnt' : [np.sum],'EOC' : [np.max],'EOT' : [np.max]})
         #umTable = df.pivot_table(index=['daypart','folder'],columns='view',values='exp_pass',aggfunc='sum')
+
+        print(pDf)
+        #print(tabulate(df, headers = 'keys', tablefmt = 'psql'))
 
         return df 
     
@@ -217,8 +227,11 @@ class GTRI_stats:
             'daypart': daypartArray,
         }
 
+        #TODO: Set data types
+
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
         #print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
+        pd.options.display.float_format = '{:.0f}'.format
         print(df.pivot_table(columns='view',values='fileCnt',index=['daypart','folder']))
 
         #FPS Dataframe
@@ -229,6 +242,7 @@ class GTRI_stats:
         }
 
         dfFPS = pd.DataFrame.from_dict(d,orient='index').transpose()
+        #TODO: Set data types
         return dfFPS
 
         #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))           
@@ -401,7 +415,7 @@ class GTRI_stats:
         print(portionTable)
 
 
-    def plot_FPS(self,aeiDf,dfFPS):
+    def plot_FPS(self,aeiDf,dfFPS,dfSpeed):
 
         palette = itertools.cycle(sns.color_palette())
         pd.options.mode.chained_assignment = None
@@ -431,7 +445,14 @@ class GTRI_stats:
             plt.setp(axLive.lines, zorder=100)
             #axLive.ylabel("carSpeed",color="b")
             axLive.yaxis.label.set_color('b')
-            
+
+            #Plot SpeedArray
+            select = dfSpeed['folder'] == f
+            subDfSpeed = dfSpeed[select]
+
+            x = len(subAeiDf)*np.linspace(0,1,num=len(subDfSpeed))
+            sns.lineplot(x=x, y=subDfSpeed['speed'], color="k",ax=axLive,zorder=100,linestyle='--')
+
             ax2 = axLive.twinx()
             color=next(palette) #remove blue
             ax2.set(ylim=(0, 25))
@@ -612,41 +633,54 @@ class GTRI_stats:
         peaks, properties = find_peaks(-signal_ts, prominence=10, width=1, rel_height=0.9, distance=15)
 
         #Plot Signal
-        fig, ax = plt.subplots(figsize = (14,7))
-        plt.plot(loc,signal_ts)
+        # fig, ax = plt.subplots(figsize = (14,7))
+        # plt.plot(loc,signal_ts)
 
-        for i in range(0,len(peaks)):
-            plt.text(loc[peaks[i]]-15, signal_ts[peaks[i]]-1, str(i+1), fontsize = 10,color = 'red')
-        plt.show()
+        # for i in range(0,len(peaks)):
+        #     plt.text(loc[peaks[i]]-15, signal_ts[peaks[i]]-1, str(i+1), fontsize = 10,color = 'red')
+        # plt.show()
 
         #print(peaks)
 
+        for i in range(0,len(peaks)):
+            for k in range(0,3):
+                if isLeft:
+                    fullImgPath = folder + file_names[peaks[i]-5+k]
+                    img = Image.open(fullImgPath)
+                    savePath = SAVE_FOLDER + file_names[peaks[i]-5+k]
+                    img.save(savePath, "jpeg")
+                else:
+                    fullImgPath = folder + file_names[peaks[i]+1+k]
+                    img = Image.open(fullImgPath)
+                    savePath = SAVE_FOLDER + file_names[peaks[i]-5+k]
+                    img.save(savePath, "jpeg")                
+
         #Plot Collage of Images
 
-        W = 10*400
-        H = 8*346
+        # W = 10*400
+        # H = 8*346
 
-        collage = Image.new("RGB", (W,H))
-        cnt = -1
-        maxImgCnt = min(len(peaks),80)-1
+        # collage = Image.new("RGB", (W,H))
+        # cnt = -1
+        # maxImgCnt = min(len(peaks),80)-1
 
-        for i in range(0,W,400):
-            for j in range(0,H,346):
-                cnt = cnt + 1
+        # for i in range(0,W,400):
+        #     for j in range(0,H,346):
+        #         cnt = cnt + 1
 
-                if cnt >= maxImgCnt:
-                    break
+        #         if cnt >= maxImgCnt:
+        #             break
                 
-                if isLeft:
-                    fullImgPath = folder + file_names[peaks[cnt]-3]
-                else:
-                    fullImgPath = folder + file_names[peaks[cnt]+3]
-                img = Image.open(fullImgPath)
-                img = img.resize((400,346))
+        #         if isLeft:
+        #             fullImgPath = folder + file_names[peaks[cnt]-3]
+        #         else:
+        #             fullImgPath = folder + file_names[peaks[cnt]+3]
+        #         img = Image.open(fullImgPath)
+        #         img = img.resize((400,346))
 
-                collage.paste(img, (i,j))
+        #         collage.paste(img, (i,j))
         
-        collage.show()
+        # collage.show()
 
     def process_intensity(self,dfDirection):
 
@@ -668,18 +702,201 @@ class GTRI_stats:
             else:
                 pass
 
+    def estimate_stretch(self,folder):
+
+        print('\n----------------- STRETCH PROCESSING ---------------------')
+
+        print(folder)
+
+        file_names = [fn for fn in os.listdir(folder) if fn.endswith('jpeg') ]
+        print(folder,len(file_names))
+
+        if len(file_names) < 1:
+            return 0
+
+        imgSumArray = []
+        locArray = np.array([])
+        imgProfile = np.array([])
+
+        imgSize = 400
+
+        #for i in range(0,len(file_names)):
+        for i in range(303,315):
+            #print(i)
+            frame = cv2.imread(folder+file_names[i])
+            frame = cv2.resize(frame, (imgSize,imgSize), interpolation = cv2.INTER_AREA)
+            #print(frame[:,0,0])
+            imgProfile = np.concatenate([imgProfile, frame[:,0,0]])
+            locArray = np.concatenate([locArray,i+np.linspace(0,1,num = imgSize)])
+
+            fromPath = folder + file_names[i]
+            savePath = 'C:/Users/KSH06/Desktop/to_stitch/' + file_names[i]
+            shutil.copy(fromPath,savePath)
+
+
+            #imgSumArray.append(np.average(frame, axis=0)[0][0])
+            #locArray.append(i
+        #plt.plot(imgProfile)
+
+        #kernel = np.ones(30)
+        #imgProfile = np.convolve(imgProfile, kernel)
+
+        #print("Len:",len(locArray))
+
+        #plt.acorr(imgProfile, maxlags = 10000)
+        #plt.show()
+
+        peaks, properties = find_peaks(imgProfile, prominence=200, width=5, rel_height=0.9, distance=20)
+
+        #plt.scatter(locArray[peaks][1:],np.diff(peaks))
+        # ax = plt.gca()
+        # ax.set_ylim(0, 100)
+
+        #plt.plot(np.diff(peaks))
+
+        plt.plot(imgProfile)
+        for i in range(0,len(peaks)):
+            plt.text(peaks[i],imgProfile[peaks[i]], str(i+1), fontsize = 10, color = 'red')
+
+        plt.show()
+
+        # np.savetxt("C:/Users/KSH06/Desktop/signal.csv", imgProfile, delimiter=",")
+
+    def getSpeedArray(self,f):
+
+        #print('\n----------------- PROCESSING AXEL LOGS ---------------------')
+
+        triggerTimeArray = []
+        sensorArray = []
+
+        for i in range(6,8):
+            x = np.fromfile("C:/Users/KSH06/Desktop/2022-09-07/" + f + "/Log"+str(i)+".bin", dtype=np.longlong)
+            for val in x:
+                triggerTimeArray.append(val)
+                sensorArray.append(i)
+
+        d={
+            'sensor': sensorArray,
+            'triggerTime': triggerTimeArray,
+        }
+
+        df=pd.DataFrame.from_dict(d,orient='index').transpose()
+        df = df.sort_values(by='triggerTime', ascending=True)
+        df = df.reset_index(drop=True)
+
+        speedArrayLR = []
+        Left_to_Right = True
+
+        for i in range(1,len(df)):
+            
+            incBool = df['sensor'].iloc[i] > df['sensor'].iloc[i-1]
+            
+            if incBool == Left_to_Right:
+                
+                speed = abs(0.0568182*5.09375/((df['triggerTime'].iloc[i] - df['triggerTime'].iloc[i-1])/1000000000))
+                speedArrayLR.append(speed)
+        
+        speedArrayRL = []
+        Left_to_Right = False
+
+        for i in range(1,len(df)):
+            
+            incBool = df['sensor'].iloc[i] > df['sensor'].iloc[i-1]
+            
+            if incBool == Left_to_Right:
+                
+                speed = abs(0.0568182*5.09375/((df['triggerTime'].iloc[i] - df['triggerTime'].iloc[i-1])/1000000000))
+                speedArrayRL.append(speed)        
+        
+        is_Left_to_Right = 0
+        if np.mean(np.array(speedArrayRL)) > np.mean(np.array(speedArrayLR)):
+            speedArray = speedArrayRL
+            is_Left_to_Right = 0
+        else:
+            speedArray = speedArrayLR
+            is_Left_to_Right = 1
+
+        return np.array(speedArray), is_Left_to_Right
+        #plt.plot(speedArray)
+        #plt.show()
+
+    def axel_trigger_proc(self):
+        #daypartArray.append(self.get_daypart(f))
+
+        dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+        dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+
+        for f in dirsInFolder:
+
+            if f in FOLDER_IGNORE_LIST:
+                dirsInFolder.remove(f)
+                continue
+
+        speedArray = []
+        folderArray = []
+        daypartArray = []
+        directionArray = []
+
+        for f in dirsInFolder:
+            
+            try:
+                speedData, is_Left_to_Right = self.getSpeedArray(f)
+
+                folderArray.extend([f] * len(speedData))
+                speedArray.extend(speedData)
+                daypartArray.extend([self.get_daypart(f)] * len(speedData))
+                directionArray.extend([is_Left_to_Right] * len(speedData))
+
+            except:
+                print("Missing Speed Data")
+
+
+        #Print Stats
+        d={
+            'speed': speedArray,
+            'folder': folderArray,
+            'daypart': daypartArray,
+            'direction': directionArray
+        }
+
+        dfSpeed = pd.DataFrame.from_dict(d,orient='index').transpose()
+
+        #pd.set_option("display.precision", 1)
+        pd.options.display.float_format = '{:.1f}'.format
+        sDf = dfSpeed.groupby(['daypart','folder']).agg({'speed' : [np.size, np.mean, np.max, np.min, np.ptp],'direction' : [np.max]})
+        print('\n----------------- AXEL COUNTER DATA ---------------------')
+        print(sDf)
+
+        return dfSpeed
+
+
 
     def run(self):
         
-        #aeiDf = self.aei_stats()
+        aeiDf = self.aei_stats()
+        #dfDirection = self.get_direction_summary()
+        dfSpeed = self.axel_trigger_proc()
+        dfFPS = self.file_count_stats()
+        self.plot_FPS(aeiDf,dfFPS,dfSpeed)
+
+
+        #TODO: Plot speed profile and axel counts from sensor 7 and 8 
+        # Look at crosskey timing logs
+        # PDF Testing
+        # Train by train processing
+
+
         #self.get_intensity_ts('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_30_00_21/Isometric/')
         #aeiDf = self.aei_stats()
         #dfFPS = self.file_count_stats()
-        dfDirection = self.get_direction_summary()
-        self.process_intensity(dfDirection)
+        #dfDirection = self.get_direction_summary()
+        #self.process_intensity(dfDirection)
         #self.get_intensity_ts(False,'C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_30_00_21/Isometric/')
         #self.image_stats_multi()
-        #self.plot_FPS(aeiDf,dfFPS)
+        #self.plot_FPS(aeiDf,dfFPS,speedArray)
+
+        #self.estimate_stretch('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_09_02_05_26/side_bottom/')
 
 
 
