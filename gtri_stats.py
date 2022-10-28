@@ -17,6 +17,9 @@ import cv2
 from scipy.signal import find_peaks
 import shutil
 from tabulate import tabulate
+from matplotlib.backends.backend_pdf import PdfPages
+import dataframe_image as dfi
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
@@ -35,6 +38,8 @@ N_SAMPLES = 200
 FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','2022-09-30-1058_omron','2022-09-30-1058','Left to Right Trains','Right to Left Trains','2022-09-30-0847','2022-09-30-0855','2022-09-30-1025','2022-09-30-1025_omron']
 
 #TODO: Add code for ignore folders that don't start with Train_; or to select only from certain day
+FOLDER_IGNORE_LIST = [name for name in os.listdir(MASTER_FOLDER) if name.split('_')[0] != 'Train']
+
 
 class GTRI_stats:
 
@@ -243,7 +248,7 @@ class GTRI_stats:
 
         dfFPS = pd.DataFrame.from_dict(d,orient='index').transpose()
         #TODO: Set data types
-        return dfFPS
+        return dfFPS, df
 
         #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))           
 
@@ -445,6 +450,7 @@ class GTRI_stats:
             plt.setp(axLive.lines, zorder=100)
             #axLive.ylabel("carSpeed",color="b")
             axLive.yaxis.label.set_color('b')
+            axLive.xaxis.label.set_text('Railcar Index')
 
             #Plot SpeedArray
             select = dfSpeed['folder'] == f
@@ -871,15 +877,193 @@ class GTRI_stats:
         return dfSpeed
 
 
+    def single_plot(self,aeiDf,dfFPS,dfSpeed,f):
+
+        palette = itertools.cycle(sns.color_palette())
+        pd.options.mode.chained_assignment = None
+        sns.set()
+        sns.set(font_scale=0.8)
+        plt.rcParams["figure.figsize"] = (8,5)
+        fig, axes = plt.subplots(3, 5)
+
+        colorDict = {
+        "Isometric": "r",
+        "side_bottom": "g"
+        }
+
+        maxSpeed = aeiDf['carSpeed'].max() + 5
+
+        #f = 'Train_2022_08_29_22_31'
+        axCnt = 0
+        axCnt = axCnt + 1
+        axLive = plt.subplot(1, 1, axCnt)
+        select = aeiDf['folder'] == f
+        subAeiDf = aeiDf[select]
+        #print(subAeiDf)
+
+        sns.lineplot(data=subAeiDf, x="trainIndex", y="carSpeed", color="b",ax=axLive,zorder=100).set(title=f)
+        axLive.set(ylim=(0, maxSpeed))
+        plt.setp(axLive.lines, zorder=100)
+        #axLive.ylabel("carSpeed",color="b")
+        axLive.yaxis.label.set_color('b')
+        axLive.xaxis.label.set_text('Railcar Index')
+
+        #Plot SpeedArray
+        select = dfSpeed['folder'] == f
+        subDfSpeed = dfSpeed[select]
+
+        x = len(subAeiDf)*np.linspace(0,1,num=len(subDfSpeed))
+        sns.lineplot(x=x, y=subDfSpeed['speed'], color="k",ax=axLive,zorder=100,linestyle='--')
+
+        ax2 = axLive.twinx()
+        color=next(palette) #remove blue
+        ax2.set(ylim=(0, 25))
+        for view in dfFPS['view'].unique():
+            
+            if view in colorDict.keys():
+                pass
+            else:
+                continue
+        
+            #view = 'side_bottom'
+            select = (dfFPS['folder'] == f) & (dfFPS['view'] == view)
+            subDfFPS = dfFPS[select]
+            #subDfFPS = subDfFPS.reset_index(drop=True, inplace=True)
+            #print(subDfFPS)
+            #subDfFPS['delta'] = (subDfFPS['datetime']-subDfFPS['datetime'].shift()).fillna(pd.Timedelta('0 days'))
+            subDfFPS['delta'] = subDfFPS['datetime'].diff().dt.microseconds
+            subDfFPS =  subDfFPS.assign(FPS = lambda x: (1000000/x['delta']))
+            subDfFPS.index = pd.RangeIndex(len(subDfFPS.index))
+            #print(subDfFPS)
+
+            #print("Length:",len(subAeiDf))
+            x = len(subAeiDf)*subDfFPS.index.to_numpy()/len(subDfFPS.index.to_numpy())
+
+            #ax2 = plt.twinx()
+            #ax2.set(ylim=(0, 40))
+            sns.lineplot(data=subDfFPS, x=x, y="FPS",color=colorDict[view],ax=ax2,label=view,zorder=0,alpha  = 0.5)
+
+            ax2.legend([],[], frameon=False)
+            #ax2.grid(None)
+            ax2.grid(False)
+        
+        # ax2.legend()
+        plt.tight_layout()
+        plt.savefig('./plots/plot1.png', dpi=300)
+        #plt.show()
+
+
+
+    def buildPDF(self,aeiDf,dfFPS,dfSpeed,dfCounts):
+        
+        print("Building PDF...")
+
+        dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+        dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+
+        for f in dirsInFolder:
+
+            if f in FOLDER_IGNORE_LIST:
+                dirsInFolder.remove(f)
+                continue
+
+        for f in dirsInFolder:
+
+            print(f)
+
+            #Base Image
+            base_img = Image.new('RGB', (1920, 1080),(255, 255, 255))
+
+            #Train Info
+            train_info = {'Folder': f,'Direction':'Left_to_Right','Cold Start':'Yes','Cold Stop':'No','Amtrack':'TBD','Daypart':'Nighttime'}
+            dfInfo = pd.DataFrame(list(train_info.items()),columns = ['Attribute','Value'])
+            print (dfInfo)
+            dfi.export(dfInfo,'./plots/info_table.png', dpi=300)
+            infoTable = Image.open('./plots/info_table.png')
+            infoTable = ImageOps.contain(infoTable, (400,400))
+            base_img.paste(infoTable, (60, 60))
+
+            #Speed Plot
+            self.single_plot(aeiDf,dfFPS,dfSpeed,f)
+
+            plot1 = Image.open('./plots/plot1.png')
+            plot1 = ImageOps.contain(plot1, (900,900))
+            base_img.paste(plot1, (700, 10))
+
+            #Speed Plot Legend
+            legend1 = Image.open('./plots/Legend.jpg')
+            legend1 = ImageOps.contain(legend1, (250,250))
+            base_img.paste(legend1, (1600, 50))
+
+            #AEI Speed Table
+            select = aeiDf['folder'] == f
+            subAeiDf = aeiDf[select]
+
+            pDf = subAeiDf.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp],'axelCnt' : [np.sum],'EOC' : [np.max],'EOT' : [np.max]})
+            print(pDf)
+            dfi.export(pDf,'./plots/table2.png', dpi=300)
+
+            table2 = Image.open('./plots/table2_header.png')
+            table2 = ImageOps.contain(table2, (900,900))
+            base_img.paste(table2, (20, 550))
+
+            table2 = Image.open('./plots/table2.png')
+            table2 = ImageOps.contain(table2, (750,750))
+            base_img.paste(table2, (20, 625))
+            
+
+            #Axel Speed Table
+            select = dfSpeed['folder'] == f
+            subdfSpeed = dfSpeed[select]
+
+            pDf = subdfSpeed.groupby(['folder']).agg({'speed' : [np.size, np.mean, np.max, np.min, np.ptp],'direction' : [np.max]})
+            print(pDf)
+            dfi.export(pDf,'./plots/table3.png', dpi=300)
+
+            table3 = Image.open('./plots/table3_header.png')
+            table3 = ImageOps.contain(table3, (900,900))
+            base_img.paste(table3, (20, 800))
+
+            table3 = Image.open('./plots/table3.png')
+            table3 = ImageOps.contain(table3, (650,650))
+            base_img.paste(table3, (20, 850))
+
+
+            #Image Counts Table
+            select = dfCounts['folder'] == f
+            subdfCounts = dfCounts[select]
+
+            pd.options.display.float_format = '{:.0f}'.format
+            pDf = subdfCounts.groupby(['view']).agg({'fileCnt' : [np.sum]})
+            #pDf = subdfCounts.pivot_table(columns='fileCnt',values='fileCnt',index=['view'])
+            print(pDf)
+            dfi.export(pDf,'./plots/table4.png', dpi=300)
+
+            table4 = Image.open('./plots/table4_header.png')
+            table4 = ImageOps.contain(table4, (900,900))
+            base_img.paste(table4, (900, 600))
+
+            table4 = Image.open('./plots/table4.png')
+            table4 = ImageOps.contain(table4, (200,1000))
+            base_img.paste(table4, (1150, 700))
+
+            #Save Image
+            base_img.save('./reports/' + f + '.jpg', quality=95)
+
+
+
 
     def run(self):
         
         aeiDf = self.aei_stats()
         #dfDirection = self.get_direction_summary()
         dfSpeed = self.axel_trigger_proc()
-        dfFPS = self.file_count_stats()
-        self.plot_FPS(aeiDf,dfFPS,dfSpeed)
+        dfFPS, dfCounts = self.file_count_stats()
+        
+        #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
 
+        self.buildPDF(aeiDf,dfFPS,dfSpeed,dfCounts)
 
         #TODO: Plot speed profile and axel counts from sensor 7 and 8 
         # Look at crosskey timing logs
