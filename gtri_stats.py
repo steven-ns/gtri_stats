@@ -438,7 +438,7 @@ class GTRI_stats:
 
         #f = 'Train_2022_08_29_22_31'
         axCnt = 0
-        for f in aeiDf['folder'].unique()[0:15]:
+        for f in aeiDf['folder'].unique()[-15:]:
             axCnt = axCnt + 1
             axLive = plt.subplot(3, 5, axCnt)
             select = aeiDf['folder'] == f
@@ -968,7 +968,7 @@ class GTRI_stats:
                 dirsInFolder.remove(f)
                 continue
 
-        for f in dirsInFolder:
+        for f in dirsInFolder[0:2]:
 
             print(f)
 
@@ -1052,18 +1052,87 @@ class GTRI_stats:
             base_img.save('./reports/' + f + '.jpg', quality=95)
 
 
+    def get_mosiacs_stats(self):
+        
+        pd.set_option("display.precision", 0)
+        print('\n------------------------ Mosaics Stats ------------------------')
 
+        folderArray = []
+        viewArray = []
+        countArray = []
+        daypartArray = []
+        mTypeArray = []
+     
+
+        dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+        dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+
+        #Loop Through All folders, if aei file, then add to array
+
+        for f in dirsInFolder:
+
+            if f in FOLDER_IGNORE_LIST:
+                continue
+
+            viewsInFolder = ['side_bottom','side_top']
+
+            for view in viewsInFolder:
+                
+                mosaicPath = MASTER_FOLDER + f + '/' + view + '/mosaics/'
+
+                #subDirInFolder = [name for name in os.listdir(mosaicPath) if os.path.isdir(os.path.join(mosaicPath, name))]
+                subDirInFolder = ['coupler','full_car','trucks']
+
+                for s in subDirInFolder:
+
+                    fullPath = mosaicPath + s
+                    
+                    try:
+                        allFiles = [entry for entry in os.listdir(fullPath) if os.path.isfile(os.path.join(fullPath, entry))]
+                        allFiles = [entry for entry in allFiles if entry != 'Thumbs.db']
+                        fileCnt = len(allFiles)
+                    except:
+                        fileCnt = -1
+
+                    #Folder Count Summary
+                    folderArray.append(f)
+                    viewArray.append(view)
+                    countArray.append(fileCnt)
+                    daypartArray.append(self.get_daypart(f))
+                    mTypeArray.append(s)
+
+
+        #Print Stats
+        d={
+            'view': viewArray,
+            'folder': folderArray,
+            'fileCnt': countArray,
+            'daypart': daypartArray,
+            'mosaicType': mTypeArray
+        }
+
+        #TODO: Set data types
+
+        df = pd.DataFrame.from_dict(d,orient='index').transpose()
+        #print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
+        pd.options.display.float_format = '{:.0f}'.format
+        print(df.pivot_table(columns=['view','mosaicType'],values='fileCnt',index=['daypart','folder']))
+
+    
 
     def run(self):
-        
-        aeiDf = self.aei_stats()
-        #dfDirection = self.get_direction_summary()
-        dfSpeed = self.axel_trigger_proc()
-        dfFPS, dfCounts = self.file_count_stats()
-        
-        #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
 
-        self.buildPDF(aeiDf,dfFPS,dfSpeed,dfCounts)
+        self.get_mosiacs_stats()
+
+        # aeiDf = self.aei_stats()
+        # #dfDirection = self.get_direction_summary()
+        # dfSpeed = self.axel_trigger_proc()
+        # dfFPS, dfCounts = self.file_count_stats()
+        
+        # #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
+
+        # self.buildPDF(aeiDf,dfFPS,dfSpeed,dfCounts)
 
         #TODO: Plot speed profile and axel counts from sensor 7 and 8 
         # Look at crosskey timing logs
