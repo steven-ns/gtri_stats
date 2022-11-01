@@ -193,7 +193,8 @@ class GTRI_stats:
 
         folderArrayFPS = []
         viewArrayFPS = []
-        timeArrayFPS = []        
+        timeArrayFPS = []
+        daypartFPS = []        
 
         dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
         dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
@@ -222,7 +223,8 @@ class GTRI_stats:
                 #FPS Summary Info
                 folderArrayFPS.extend([f] * len(allTimes))
                 viewArrayFPS.extend([view] * len(allTimes))
-                timeArrayFPS.extend(allTimes)  
+                timeArrayFPS.extend(allTimes)
+                daypartFPS.extend([self.get_daypart(f)] * len(allTimes))
 
         #Print Stats
         d={
@@ -243,11 +245,29 @@ class GTRI_stats:
         d={
             'view': viewArrayFPS,
             'folder': folderArrayFPS,
-            'datetime': timeArrayFPS
+            'datetime': timeArrayFPS,
+            'daypart': daypartFPS
         }
 
         dfFPS = pd.DataFrame.from_dict(d,orient='index').transpose()
         #TODO: Set data types
+
+        print('\n------------------------ FOLDER DURATIONS (Max-Min Time in Minutes) ------------------------')
+        #dfFPS['datetime_min'] = dfFPS['datetime'].dt.total_seconds()
+
+        #print(dfFPS['datetime'].head(10).dt.total_seconds())
+        #pd.set_option("display.precision", 3)
+        #print(dfFPS.groupby(['daypart','folder','view'])['datetime'].apply(lambda x: (x.max() - x.min()).total_seconds()/60))
+        #print(dfFPS.pivot_table(columns='view',values='datetime_min',index=['daypart','folder'],aggfunc={'datetime': np.ptp}))
+        #pd.set_option("display.precision", 1)
+        pd.options.display.float_format = '{:,.1f}'.format
+        print(dfFPS.pivot_table(columns='view',values='datetime',index=['daypart','folder'],aggfunc={lambda x: (x.max() - x.min()).total_seconds()/60}))
+        
+        #print(dfFPS.head(10))
+        #print(dfFPS.pivot_table(columns='view',values='datetime_min',index=['daypart','folder'],aggfunc={'datetime': np.ptp}))
+        #print(dfFPS.groupby(['folder','view']).agg({'datetime' : [np.ptp]}))   
+
+
         return dfFPS, df
 
         #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))           
@@ -1119,17 +1139,79 @@ class GTRI_stats:
         pd.options.display.float_format = '{:.0f}'.format
         print(df.pivot_table(columns=['view','mosaicType'],values='fileCnt',index=['daypart','folder']))
 
-    
+    def get_dropped_frame_stats(self,dfCounts):
+        
+        #pd.set_option("display.precision", 0)
+        print('\n------------------------ DROPPED FRAME STATS (Line Scans) ------------------------')
+
+        #print(dfCounts.head(10))
+
+        select = (dfCounts['view'] == 'side_bottom') | (dfCounts['view'] == 'side_top')
+        dfCountsLS = dfCounts[select]
+
+        pd.options.display.float_format = '{:.0f}'.format
+        pvtCnt = dfCountsLS.pivot_table(columns='view',values='fileCnt',index=['daypart','folder'])
+        pvtMax = dfCountsLS.pivot_table(values='fileCnt',index=['daypart','folder'],aggfunc={np.max})
+        pvtTable = pd.merge(pvtCnt, pvtMax,right_on=None,left_index=True,right_index=True)
+        
+        #pvtCnt['max']=np.max(pvtCnt['side_bottom'],pvtCnt['side_top'])
+        pvtTable['side_bottom_drops'] = pvtTable['amax'] - pvtTable['side_bottom']
+        pvtTable['side_top_drops'] = pvtTable['amax'] - pvtTable['side_top']
+
+        print(pvtTable)
+
+        #print(np.sum(pvtTable['side_bottom_drops']),np.sum(pvtTable['amax']))
+        #isNan = pvtTable['side_bottom_drops'] == NaN
+        #isNan = ~np.isnan(pvtTable['side_top_drops'])
+        #print(isNan)
+        #print(pvtTable[isNan]['side_top_drops'])
+
+        isNan = ~np.isnan(pvtTable['side_top_drops'])
+        sbDrops = 10000 * np.sum(pvtTable[isNan]['side_bottom_drops'])/np.sum(pvtTable[isNan]['amax'])
+        isNan = ~np.isnan(pvtTable['side_top_drops'])
+        stDrops = 10000 * np.sum(pvtTable[isNan]['side_top_drops'])/np.sum(pvtTable[isNan]['amax'])
+        print()
+        print("side_bottom dropped frames: ", "{:.1f}".format(sbDrops), " per 10k")
+        print("side_top dropped frames: ", "{:.1f}".format(stDrops), " per 10k")
+
+        print('\n------------------------ DROPPED FRAME STATS (Area Scans) ------------------------')
+
+        select = (dfCounts['view'] == 'Brake_lower') | (dfCounts['view'] == 'Brake_upper')
+        dfCountsLS = dfCounts[select]
+
+        pd.options.display.float_format = '{:.0f}'.format
+        pvtCnt = dfCountsLS.pivot_table(columns='view',values='fileCnt',index=['daypart','folder'])
+        pvtMax = dfCountsLS.pivot_table(values='fileCnt',index=['daypart','folder'],aggfunc={np.max})
+        pvtTable = pd.merge(pvtCnt, pvtMax,right_on=None,left_index=True,right_index=True)
+        
+        #pvtCnt['max']=np.max(pvtCnt['side_bottom'],pvtCnt['side_top'])
+        pvtTable['Brake_lower_drops'] = pvtTable['amax'] - pvtTable['Brake_lower']
+        pvtTable['Brake_upper_drops'] = pvtTable['amax'] - pvtTable['Brake_upper']
+
+        print(pvtTable)
+
+        isNan = ~np.isnan(pvtTable['Brake_lower_drops'])
+        sbDrops = 10000 * np.sum(pvtTable[isNan]['Brake_lower_drops'])/np.sum(pvtTable[isNan]['amax'])
+        isNan = ~np.isnan(pvtTable['Brake_upper_drops'])
+        stDrops = 10000 * np.sum(pvtTable[isNan]['Brake_upper_drops'])/np.sum(pvtTable[isNan]['amax'])
+        print()
+        print("Brake_lower dropped frames: ", "{:.1f}".format(sbDrops), " per 10k")
+        print("Brake_upper dropped frames: ", "{:.1f}".format(stDrops), " per 10k")
+
+
 
     def run(self):
 
         self.get_mosiacs_stats()
 
+
         # aeiDf = self.aei_stats()
         # #dfDirection = self.get_direction_summary()
         # dfSpeed = self.axel_trigger_proc()
-        # dfFPS, dfCounts = self.file_count_stats()
+        dfFPS, dfCounts = self.file_count_stats()
         
+        self.get_dropped_frame_stats(dfCounts)
+
         # #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
 
         # self.buildPDF(aeiDf,dfFPS,dfSpeed,dfCounts)
