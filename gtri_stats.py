@@ -135,7 +135,7 @@ class GTRI_stats:
         df = pd.DataFrame.from_dict(d,orient='index').transpose()
         #TODO: Set data types
 
-        print('------------------------ AEI DATA ------------------------')
+        print('\n------------------------ AEI DATA ------------------------')
         #print(df.groupby(['folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp]}))
         #print(df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp],'axelCnt' : [np.sum],'EOC' : [np.max],'EOT' : [np.max]}))
         pDf = df.groupby(['daypart','folder']).agg({'carSpeed' : [np.size, np.mean, np.max, np.min, np.ptp],'axelCnt' : [np.sum],'EOC' : [np.max],'EOT' : [np.max]})
@@ -796,7 +796,7 @@ class GTRI_stats:
         sensorArray = []
 
         for i in range(6,8):
-            x = np.fromfile("C:/Users/KSH06/Desktop/2022-09-07/" + f + "/Log"+str(i)+".bin", dtype=np.longlong)
+            x = np.fromfile(MASTER_FOLDER + f + "/Log"+str(i)+".bin", dtype=np.longlong)
             for val in x:
                 triggerTimeArray.append(val)
                 sensorArray.append(i)
@@ -1198,39 +1198,47 @@ class GTRI_stats:
         print("Brake_lower dropped frames: ", "{:.1f}".format(sbDrops), " per 10k")
         print("Brake_upper dropped frames: ", "{:.1f}".format(stDrops), " per 10k")
 
+    def get_image_stats_per_car(self,aeiDf,dfCounts):
+        
+        #pd.set_option("display.precision", 0)
+        print('\n------------------------ VIEW COUNTS PER RAILCAR ------------------------')
 
+        aeiTable = aeiDf.pivot_table(index=['daypart','folder'],values='carSpeed',aggfunc='count')
+        #print(aeiTable)
+
+        cntTable = dfCounts.pivot_table(index=['daypart','folder'],columns='view',values='fileCnt',aggfunc='sum')
+        #print(cntTable)
+        portionTable = cntTable
+
+        for uView in np.unique(dfCounts['view']):
+            portionTable[uView] = portionTable[uView]/aeiTable['carSpeed']
+
+        #portionTable = cntTable.div(aeiTable['carSpeed'])
+        pd.options.display.float_format = '{:.1f}'.format
+        print(portionTable)
+
+        #print(dfCounts.head(10))    
 
     def run(self):
 
         self.get_mosiacs_stats()
 
-
-        # aeiDf = self.aei_stats()
-        # #dfDirection = self.get_direction_summary()
-        # dfSpeed = self.axel_trigger_proc()
+        aeiDf = self.aei_stats()
+        #dfDirection = self.get_direction_summary()
+        #self.image_stats_multi() #Overexposure
+        dfSpeed = self.axel_trigger_proc()
         dfFPS, dfCounts = self.file_count_stats()
         
         self.get_dropped_frame_stats(dfCounts)
+        self.get_image_stats_per_car(aeiDf,dfCounts)
 
+        #-------- Plotting --------
         # #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
-
         # self.buildPDF(aeiDf,dfFPS,dfSpeed,dfCounts)
 
-        #TODO: Plot speed profile and axel counts from sensor 7 and 8 
-        # Look at crosskey timing logs
-        # PDF Testing
-        # Train by train processing
-
-
-        #self.get_intensity_ts('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_30_00_21/Isometric/')
-        #aeiDf = self.aei_stats()
-        #dfFPS = self.file_count_stats()
-        #dfDirection = self.get_direction_summary()
+        #-------- Stretch Stats --------
         #self.process_intensity(dfDirection)
         #self.get_intensity_ts(False,'C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_30_00_21/Isometric/')
-        #self.image_stats_multi()
-        #self.plot_FPS(aeiDf,dfFPS,speedArray)
-
         #self.estimate_stretch('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_09_02_05_26/side_bottom/')
 
 
