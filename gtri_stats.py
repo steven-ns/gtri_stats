@@ -1102,7 +1102,7 @@ class GTRI_stats:
                 mosaicPath = MASTER_FOLDER + f + '/' + view + '/mosaics/'
 
                 #subDirInFolder = [name for name in os.listdir(mosaicPath) if os.path.isdir(os.path.join(mosaicPath, name))]
-                subDirInFolder = ['coupler','full_car','trucks']
+                subDirInFolder = ['couplers','full_car','trucks','units']
 
                 for s in subDirInFolder:
 
