@@ -1267,19 +1267,76 @@ class GTRI_stats:
             for s,d in zip(srcFiles,dstFiles):
                 shutil.copyfile(s, d)
 
+    def get_trigger_counts(self):
+        
+        pd.set_option("display.precision", 0)
+        print('\n------------------------ Trigger Stats ------------------------')
+
+        folderArray = []
+        viewArray = []
+        countArray = []
+        daypartArray = []
+     
+        dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+        dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+
+        #Loop Through All folders, if aei file, then add to array
+
+        for f in dirsInFolder:
+
+            if f in FOLDER_IGNORE_LIST:
+                continue
+
+            triggerLogPath = MASTER_FOLDER + f + '/channelTriggerCounts.txt'
+            #print(triggerLogPath)
+
+            try:
+                trigCounts = np.loadtxt(triggerLogPath)
+            except:
+                continue
+
+            #print(trigCounts)
+
+            for key in trigger_dict:
+                
+                folderArray.append(f)
+                viewArray.append(key)
+                countArray.append(trigCounts[trigger_dict[key]])
+                daypartArray.append(self.get_daypart(f))
+                
+                #print(key)
+                #Print Stats
+        
+        d={
+            'view': viewArray,
+            'folder': folderArray,
+            'triggers': countArray,
+            'daypart': daypartArray,
+        }
+
+        #TODO: Set data types
+
+        df = pd.DataFrame.from_dict(d,orient='index').transpose()
+        #print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
+        pd.options.display.float_format = '{:.0f}'.format
+        print(df.pivot_table(columns=['view'],values='triggers',index=['daypart','folder']))
+
     def run(self):
 
         #self.sample_images('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_29_22_31/side_bottom/',10)
         #self.sample_images('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_29_22_31/side_bottom/',10,'C:/Users/KSH06/Desktop/test2/')
         #print(trigger_dict['Isometric'])
 
-        self.get_mosiacs_stats()
-        aeiDf = self.aei_stats()
-        dfSpeed = self.axel_trigger_proc()
-        dfFPS, dfCounts = self.file_count_stats()
+        self.get_trigger_counts()
+
+        # self.get_mosiacs_stats()
+        # aeiDf = self.aei_stats()
+        # dfSpeed = self.axel_trigger_proc()
+        # dfFPS, dfCounts = self.file_count_stats()
         
-        self.get_dropped_frame_stats(dfCounts)
-        self.get_image_stats_per_car(aeiDf,dfCounts)
+        # self.get_dropped_frame_stats(dfCounts)
+        # self.get_image_stats_per_car(aeiDf,dfCounts)
 
         #-------- Plotting --------
         # #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
