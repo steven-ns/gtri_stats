@@ -21,6 +21,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 import dataframe_image as dfi
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
+from random import sample
+
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
 
@@ -40,6 +42,7 @@ FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','2022-09-30-105
 #TODO: Add code for ignore folders that don't start with Train_; or to select only from certain day
 FOLDER_IGNORE_LIST = [name for name in os.listdir(MASTER_FOLDER) if name.split('_')[0] != 'Train']
 
+trigger_dict = {'Brake_lower':2,'Brake_upper':2,'Isometric':0,'UC_isometric':1,'crosskey':3,'ls_truck':-1,'side_bottom':-1,'side_top':-1,'truck':4,'under_up':1}
 
 class GTRI_stats:
 
@@ -1198,6 +1201,30 @@ class GTRI_stats:
         print("Brake_lower dropped frames: ", "{:.1f}".format(sbDrops), " per 10k")
         print("Brake_upper dropped frames: ", "{:.1f}".format(stDrops), " per 10k")
 
+        print('\n------------------------ DROPPED FRAME STATS (Area Scans) ------------------------')
+
+        select = (dfCounts['view'] == 'UC_isometric') | (dfCounts['view'] == 'under_up')
+        dfCountsLS = dfCounts[select]
+
+        pd.options.display.float_format = '{:.0f}'.format
+        pvtCnt = dfCountsLS.pivot_table(columns='view',values='fileCnt',index=['daypart','folder'])
+        pvtMax = dfCountsLS.pivot_table(values='fileCnt',index=['daypart','folder'],aggfunc={np.max})
+        pvtTable = pd.merge(pvtCnt, pvtMax,right_on=None,left_index=True,right_index=True)
+        
+        #pvtCnt['max']=np.max(pvtCnt['side_bottom'],pvtCnt['side_top'])
+        pvtTable['UC_isometric_drops'] = pvtTable['amax'] - pvtTable['UC_isometric']
+        pvtTable['under_up_drops'] = pvtTable['amax'] - pvtTable['under_up']
+
+        print(pvtTable)
+
+        isNan = ~np.isnan(pvtTable['UC_isometric_drops'])
+        sbDrops = 10000 * np.sum(pvtTable[isNan]['UC_isometric_drops'])/np.sum(pvtTable[isNan]['amax'])
+        isNan = ~np.isnan(pvtTable['under_up_drops'])
+        stDrops = 10000 * np.sum(pvtTable[isNan]['under_up_drops'])/np.sum(pvtTable[isNan]['amax'])
+        print()
+        print("UC_isometric dropped frames: ", "{:.1f}".format(sbDrops), " per 10k")
+        print("under_up dropped frames: ", "{:.1f}".format(stDrops), " per 10k")        
+
     def get_image_stats_per_car(self,aeiDf,dfCounts):
         
         #pd.set_option("display.precision", 0)
@@ -1217,15 +1244,37 @@ class GTRI_stats:
         pd.options.display.float_format = '{:.1f}'.format
         print(portionTable)
 
-        #print(dfCounts.head(10))    
+        #print(dfCounts.head(10))
+
+    def sample_images(self, path_to_view, n_samples, dst = ''):
+
+        #Get Source Files
+        allFiles = [item for item in os.listdir(path_to_view) if os.path.isfile(os.path.join(path_to_view, item))]
+        allFiles = [item for item in allFiles if item != 'Thumbs.db']
+        
+        #Get Sample Size
+        sample_size = min(len(allFiles),n_samples)
+        
+        #Sample
+        sampleFiles = sample(allFiles,sample_size)
+        print(len(sampleFiles))
+
+        if dst:
+            
+            srcFiles = [path_to_view + item for item in sampleFiles]
+            dstFiles = [dst + item for item in sampleFiles]
+
+            for s,d in zip(srcFiles,dstFiles):
+                shutil.copyfile(s, d)
 
     def run(self):
 
-        self.get_mosiacs_stats()
+        #self.sample_images('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_29_22_31/side_bottom/',10)
+        #self.sample_images('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_29_22_31/side_bottom/',10,'C:/Users/KSH06/Desktop/test2/')
+        #print(trigger_dict['Isometric'])
 
+        self.get_mosiacs_stats()
         aeiDf = self.aei_stats()
-        #dfDirection = self.get_direction_summary()
-        #self.image_stats_multi() #Overexposure
         dfSpeed = self.axel_trigger_proc()
         dfFPS, dfCounts = self.file_count_stats()
         
@@ -1236,7 +1285,9 @@ class GTRI_stats:
         # #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
         # self.buildPDF(aeiDf,dfFPS,dfSpeed,dfCounts)
 
-        #-------- Stretch Stats --------
+        #-------- Depricated Stats --------
+        #dfDirection = self.get_direction_summary()
+        #self.image_stats_multi() #Overexposure
         #self.process_intensity(dfDirection)
         #self.get_intensity_ts(False,'C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_30_00_21/Isometric/')
         #self.estimate_stretch('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_09_02_05_26/side_bottom/')
