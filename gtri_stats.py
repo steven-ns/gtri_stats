@@ -20,6 +20,7 @@ from tabulate import tabulate
 from matplotlib.backends.backend_pdf import PdfPages
 import dataframe_image as dfi
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
+import matplotlib.dates as mdates
 
 from random import sample
 
@@ -1302,7 +1303,11 @@ class GTRI_stats:
                 
                 folderArray.append(f)
                 viewArray.append(key)
-                countArray.append(trigCounts[trigger_dict[key]])
+                if trigger_dict[key] > -1:
+                    countArray.append(trigCounts[trigger_dict[key]])
+                else:
+                    countArray.append(-1)
+                
                 daypartArray.append(self.get_daypart(f))
                 
                 #print(key)
@@ -1322,18 +1327,115 @@ class GTRI_stats:
         pd.options.display.float_format = '{:.0f}'.format
         print(df.pivot_table(columns=['view'],values='triggers',index=['daypart','folder']))
 
+        return(df.pivot_table(columns=['view'],values='triggers',index=['daypart','folder']))
+
+    def file_trigger_cnt_diff(self,dfCounts,dfTriggers):
+
+        print('\n------------------------ View Counts - Triggers ------------------------')
+
+    def uptime_plots(self,dfFPS):
+
+        print('\n------------------------ PLOTS OF UPTIME ------------------------')
+        palette = itertools.cycle(sns.color_palette())
+        pd.options.mode.chained_assignment = None
+        sns.set()
+        sns.set(font_scale=0.8)
+        plt.rcParams["figure.figsize"] = (15,8)
+        fig, axes = plt.subplots(2, 2)
+
+        colorDict = {
+        "Brake_lower": "b",
+        "Brake_upper": "b",
+        "Isometric": "g",
+        "UC_isometric": "r",
+        "crosskey":"c",
+        "ls_truck": "y",
+        "side_bottom": "k",
+        "side_top": "k",
+        "truck": "m",
+        "under_up": "r"
+        }
+
+        axCnt = 0
+        for f in dfFPS['folder'].unique()[-4:]:
+            
+            axCnt = axCnt + 1 
+            axLive = plt.subplot(2, 2, axCnt)
+            axLive.set(ylim=(0, 11))
+            axLive.grid(axis='y')
+            axLive.set(yticklabels=[])
+
+            select = (dfFPS['folder'] == f)
+            subDfFPS = dfFPS[select]
+            duration = max(subDfFPS['datetime']) - min(subDfFPS['datetime'])
+            #print("Duration: ", duration.total_seconds())
+
+            xformatter = mdates.DateFormatter('%H:%M')
+            if duration.total_seconds() < 5*60:
+                xlocator = mdates.MinuteLocator(interval = 1)
+            else:
+                xlocator = mdates.MinuteLocator(interval = 5)
+            axLive.xaxis.set_major_locator(xlocator)
+            axLive.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+            #axLive.legend([],[], frameon=False)
+            axLive.xaxis.label.set_text('')
+
+            yStart = 0
+            for view in colorDict.keys():
+            
+                yStart = yStart + 1
+                select = (dfFPS['folder'] == f) & (dfFPS['view'] == view)
+                subDfFPS = dfFPS[select]
+
+                if len(subDfFPS) > 0:
+                    pass
+                else:
+                    continue
+
+                y_array = yStart*np.ones((len(subDfFPS['datetime']),), dtype=int)
+
+                sns.scatterplot(x = subDfFPS['datetime'], y=y_array ,color=colorDict[view], linewidth=0, label=view, size = 5, alpha  = 1).set(title=f)
+
+                # xformatter = mdates.DateFormatter('%H:%M')
+                # xlocator = mdates.MinuteLocator(interval = 1)
+
+                # ## Set xtick labels to appear every 15 minutes
+                # axLive.xaxis.set_major_locator(xlocator)
+                # axLive.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+                axLive.xaxis.label.set_text('')
+                axLive.legend([],[], frameon=False)
+                # #axLive.grid(axis='x')
+
+                # #axLive.xaxis.set_major_locator(mdates.HourLocator(interval=4))
+                # #axLive.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            
+            #axLive.autofmt_xdate()
+        
+        # ax2.legend()
+        #axLive.autofmt_xdate()
+        plt.tight_layout()
+        plt.show()
+
     def run(self):
 
         #self.sample_images('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_29_22_31/side_bottom/',10)
         #self.sample_images('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_29_22_31/side_bottom/',10,'C:/Users/KSH06/Desktop/test2/')
         #print(trigger_dict['Isometric'])
 
-        self.get_trigger_counts()
+        #self.uptime_plots()
+
+        # dfTriggers = self.get_trigger_counts()
 
         # self.get_mosiacs_stats()
         # aeiDf = self.aei_stats()
         # dfSpeed = self.axel_trigger_proc()
-        # dfFPS, dfCounts = self.file_count_stats()
+        dfFPS, dfCounts = self.file_count_stats()
+
+        self.uptime_plots(dfFPS)
+
+        # #print('\n------------------------ View Counts - Triggers ------------------------')
+        # #print(dfCounts.reset_index(level=0).sub(dfTriggers.reset_index(level=0)))
+        # self.file_trigger_cnt_diff(dfCounts,dfTriggers)
         
         # self.get_dropped_frame_stats(dfCounts)
         # self.get_image_stats_per_car(aeiDf,dfCounts)
