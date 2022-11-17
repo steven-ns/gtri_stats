@@ -20,12 +20,15 @@ from tabulate import tabulate
 from matplotlib.backends.backend_pdf import PdfPages
 import dataframe_image as dfi
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
-import matplotlib.dates as mdates
-
+from shutil import get_terminal_size
 from random import sample
-
+import matplotlib.dates as mdates
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
+pd.set_option('display.width', get_terminal_size()[0])
+
+import warnings
+warnings.filterwarnings("ignore")
 
 MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
 #MASTER_FOLDER = 'X:/'
@@ -42,6 +45,19 @@ FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','2022-09-30-105
 
 #TODO: Add code for ignore folders that don't start with Train_; or to select only from certain day
 FOLDER_IGNORE_LIST = [name for name in os.listdir(MASTER_FOLDER) if name.split('_')[0] != 'Train']
+
+for name in os.listdir(MASTER_FOLDER):
+    
+    C = name.split('_')
+    
+    if C[0] == 'Train':
+        
+        #print(C)
+        time_str = C[1] + "-" + C[2] + "-" + C[3]
+        a = datetime.strptime(time_str, '%Y-%m-%d')
+        
+        if a < datetime(2022, 11, 16):
+            FOLDER_IGNORE_LIST.append(name)
 
 trigger_dict = {'Brake_lower':2,'Brake_upper':2,'Isometric':0,'UC_isometric':1,'crosskey':3,'ls_truck':-1,'side_bottom':-1,'side_top':-1,'truck':4,'under_up':1}
 
@@ -1415,6 +1431,92 @@ class GTRI_stats:
         #axLive.autofmt_xdate()
         plt.tight_layout()
         plt.show()
+
+    def drop_plots(self,dfFPS):
+        
+        trigLogNameList = ['isoTsCamTrigger.txt','ucIsoTsCamTrigger.txt','brakeTrigger.txt','crosskeyTrigger.txt','truckTrigger.txt']
+        colorDict = {
+        "Brake_lower": "b",
+        "Brake_upper": "b",
+        "Isometric": "g",
+        "UC_isometric": "r",
+        "crosskey":"c",
+        "ls_truck": "y",
+        "side_bottom": "k",
+        "side_top": "k",
+        "truck": "m",
+        "under_up": "r"
+        }        
+        print('\n------------------------ PLOTS OF CUMULATIVE DROPPED FRAMES ------------------------')
+        palette = itertools.cycle(sns.color_palette())
+        pd.options.mode.chained_assignment = None
+        sns.set()
+        sns.set(font_scale=0.8)
+        plt.rcParams["figure.figsize"] = (15,8)
+        fig, axes = plt.subplots(2, 2)
+
+        axCnt = 0
+
+        dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+        dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+
+        #Loop Through All folders, if aei file, then add to array
+
+        for f in dirsInFolder[-4:]:
+
+            if f in FOLDER_IGNORE_LIST:
+                continue
+
+            axCnt = axCnt + 1 
+            axLive = plt.subplot(2, 2, axCnt)
+
+            select = dfFPS['folder'] == f
+            subDfFPS = dfFPS[select]
+            
+            print("FOLDER: ", f, len(subDfFPS))
+
+            for view in subDfFPS['view'].unique():
+
+                #print(view)
+                if trigger_dict[view] < 0:
+                    continue
+
+                select = (subDfFPS['folder'] == f) & (subDfFPS['view'] == view)
+                sdf = subDfFPS[select]
+                
+                #print(view,len(sdf),sum(select))
+                
+                fileTimes = pd.to_datetime(sdf['datetime']).to_numpy().astype(datetime).astype(float) + 5*60*60*1000000000
+                trigLogPath = MASTER_FOLDER + f + '/' + trigLogNameList[trigger_dict[view]]
+                trigTimes = np.loadtxt(trigLogPath)
+                
+                #print(trigLogPath)
+                #print(view,len(sdf),sum(select),len(trigTimes))
+                
+                allTimes = np.sort(np.concatenate((fileTimes,trigTimes)))
+
+                diffCnt = []
+                cumTrig = []
+                cumFiles = []
+
+                for t in allTimes:
+
+                    diffCnt.append(np.sum(trigTimes<t) - np.sum(fileTimes<t))
+                    cumTrig.append(np.sum(trigTimes<t))
+                    cumFiles.append(np.sum(fileTimes<t))
+                
+
+                sns.lineplot(x = (allTimes[10:]/1000000000).astype(float),y = diffCnt[10:],color=colorDict[view],label=view).set(title=f)
+
+                
+                axLive.legend(loc='upper left')
+                #axLive.legend([],[], frameon=False)
+                axLive.yaxis.label.set_text('Cumulative Dropped Frames')
+
+        plt.tight_layout()
+        plt.show()
+
 
     def run(self):
 
