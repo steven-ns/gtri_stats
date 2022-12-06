@@ -25,13 +25,14 @@ from random import sample
 import matplotlib.dates as mdates
 pd.set_option("display.precision", 1)
 pd.set_option('display.max_rows', None)
-pd.set_option('display.width', get_terminal_size()[0])
+#pd.set_option('display.width', get_terminal_size()[0])
+pd.set_option('display.width', 1000)
 
 import warnings
 warnings.filterwarnings("ignore")
 
-MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
-#MASTER_FOLDER = 'X:/'
+#MASTER_FOLDER = 'C:/Users/KSH06/Desktop/2022-09-07/'
+MASTER_FOLDER = 'X:/'
 #MASTER_FOLDER = 'X:/Left to Right Trains/'
 #MASTER_FOLDER = 'X:/Right to Left Trains/'
 
@@ -45,6 +46,10 @@ FOLDER_IGNORE_LIST = ['$RECYCLE.BIN','System Volume Information','2022-09-30-105
 
 #TODO: Add code for ignore folders that don't start with Train_; or to select only from certain day
 FOLDER_IGNORE_LIST = [name for name in os.listdir(MASTER_FOLDER) if name.split('_')[0] != 'Train']
+#FOLDER_IGNORE_LIST = [name for name in os.listdir(MASTER_FOLDER) if name.split('_')[0] != 'Tests']
+
+#FOLDER_IGNORE_LIST.append('Train_2022_11_18_06_57 High roller')
+#FOLDER_IGNORE_LIST.append('Train_2022_11_18_07_15 High Railer')
 
 for name in os.listdir(MASTER_FOLDER):
     
@@ -56,8 +61,9 @@ for name in os.listdir(MASTER_FOLDER):
         time_str = C[1] + "-" + C[2] + "-" + C[3]
         a = datetime.strptime(time_str, '%Y-%m-%d')
         
-        if a < datetime(2022, 11, 16):
+        if a < datetime.today() - timedelta(days=3):
             FOLDER_IGNORE_LIST.append(name)
+
 
 trigger_dict = {'Brake_lower':2,'Brake_upper':2,'Isometric':0,'UC_isometric':1,'crosskey':3,'ls_truck':-1,'side_bottom':-1,'side_top':-1,'truck':4,'under_up':1}
 
@@ -469,6 +475,11 @@ class GTRI_stats:
         plt.rcParams["figure.figsize"] = (15,8)
         fig, axes = plt.subplots(3, 5)
 
+        #colorDict = {
+        #"Isometric": "r",
+        #"side_bottom": "g"
+        #}
+
         colorDict = {
         "Isometric": "r",
         "side_bottom": "g"
@@ -501,7 +512,7 @@ class GTRI_stats:
 
             ax2 = axLive.twinx()
             color=next(palette) #remove blue
-            ax2.set(ylim=(0, 25))
+            ax2.set(ylim=(0, 40))
             for view in dfFPS['view'].unique():
                 
                 if view in colorDict.keys():
@@ -539,6 +550,111 @@ class GTRI_stats:
         #plt.ylabel('some numbers')
         #plt.show()
         #print("TEST")
+
+    def plot_FPS_train(self,aeiDf,dfFPS,dfSpeed,dfSpeedLog,f):
+
+        palette = itertools.cycle(sns.color_palette())
+        pd.options.mode.chained_assignment = None
+        sns.set()
+        sns.set(font_scale=0.8)
+        plt.rcParams["figure.figsize"] = (15,8)
+        fig, axes = plt.subplots(3, 1)
+
+        #colorDict = {
+        #"Isometric": "r",
+        #"side_bottom": "g"
+        #}
+
+        colorDict = {
+        "side_bottom": "r",
+        "side_top": "g",
+        "ls_truck": "b"
+        }
+
+        maxSpeed = aeiDf['carSpeed'].max() + 5
+
+        #f = 'Train_2022_08_29_22_31'
+        axCnt = 0
+        for view in dfFPS['view'].unique():
+            
+            if view in colorDict.keys():
+                pass
+            else:
+                continue
+            axCnt = axCnt + 1
+            axLive = plt.subplot(3, 1, axCnt)
+            select = aeiDf['folder'] == f
+            subAeiDf = aeiDf[select]
+            #print(subAeiDf)
+
+            #sns.lineplot(data=subAeiDf, x="trainIndex", y="carSpeed", color="b",ax=axLive,zorder=100).set(title=f)
+            axLive.set(ylim=(0, maxSpeed))
+            plt.setp(axLive.lines, zorder=100)
+            #axLive.ylabel("carSpeed",color="k")
+            #axLive.yaxis.label.set_color('b')
+            axLive.xaxis.label.set_text('Railcar Index')
+            axLive.yaxis.label.set_text('Speed (mph)')
+
+            #Plot SpeedArray
+            select = dfSpeed['folder'] == f
+            subDfSpeed = dfSpeed[select]
+
+            x = len(subAeiDf)*np.linspace(0,1,num=len(subDfSpeed))
+            sns.lineplot(x=x, y=subDfSpeed['speed'], color="k",ax=axLive,zorder=100,linestyle='--',label='Speed (6-7)').set(title=f + ' - ' + view)
+
+            select = dfSpeedLog['folder'] == f
+            subDfSpeedLog = dfSpeedLog[select]
+
+            x = len(subAeiDf)*np.linspace(0,1,num=len(subDfSpeedLog))
+            sns.lineplot(x=x, y=subDfSpeedLog['speed'], color="k",ax=axLive,zorder=100,linestyle='-',label='Speed (Log)').set(title=f + ' - ' + view)
+            
+            axLive.legend(loc='upper left')
+            
+            ax2 = axLive.twinx()
+            color=next(palette) #remove blue
+            ax2.set(ylim=(0, 50))
+            
+            #view = 'side_bottom'
+            select = (dfFPS['folder'] == f) & (dfFPS['view'] == view)
+            subDfFPS = dfFPS[select]
+            #subDfFPS = subDfFPS.reset_index(drop=True, inplace=True)
+            #print(subDfFPS)
+            #subDfFPS['delta'] = (subDfFPS['datetime']-subDfFPS['datetime'].shift()).fillna(pd.Timedelta('0 days'))
+            subDfFPS['delta'] = subDfFPS['datetime'].diff().dt.microseconds
+            subDfFPS =  subDfFPS.assign(FPS = lambda x: (1000000/x['delta']))
+            subDfFPS.index = pd.RangeIndex(len(subDfFPS.index))
+            #print(subDfFPS)
+
+            #print("Length:",len(subAeiDf))
+            x = len(subAeiDf)*subDfFPS.index.to_numpy()/len(subDfFPS.index.to_numpy())
+
+            #ax2 = plt.twinx()
+            #ax2.set(ylim=(0, 40))
+            sns.lineplot(data=subDfFPS, x=x, y="FPS",color=colorDict[view],ax=ax2,label=view+' FPS',zorder=0,alpha  = 0.5)
+            
+            #Plot The Delay
+            for i in range(1,len(subDfFPS)):
+            
+                if subDfFPS['delta'].iloc[i] > subDfFPS['delta'].iloc[i-1] + 10000:
+                    #print(x[i],subDfFPS['delta'].iloc[i],subDfFPS['FPS'].iloc[i])
+                    dStr = str(int(subDfFPS['delta'].iloc[i]/1000)) + 'ms'
+                    plt.text(x[i]+0.5, subDfFPS['FPS'].iloc[i], dStr, fontsize = 6,color = 'black')
+            
+            
+            ax2.legend(loc='upper right')
+            #ax2.legend([],[], frameon=False)
+            #ax2.grid(None)
+            ax2.grid(False)
+        
+        # ax2.legend()
+        plt.tight_layout()
+        plt.show()
+
+        #plt.plot([1, 2, 3, 4])
+        #plt.ylabel('some numbers')
+        #plt.show()
+        #print("TEST")
+
     
     def get_direction(self,folder):
 
@@ -829,7 +945,8 @@ class GTRI_stats:
         df=pd.DataFrame.from_dict(d,orient='index').transpose()
         df = df.sort_values(by='triggerTime', ascending=True)
         df = df.reset_index(drop=True)
-
+        
+        timeArrayLR = []
         speedArrayLR = []
         Left_to_Right = True
 
@@ -841,7 +958,9 @@ class GTRI_stats:
                 
                 speed = abs(0.0568182*5.09375/((df['triggerTime'].iloc[i] - df['triggerTime'].iloc[i-1])/1000000000))
                 speedArrayLR.append(speed)
+                timeArrayLR.append(df['triggerTime'].iloc[i]/1000000000)
         
+        timeArrayRL = []
         speedArrayRL = []
         Left_to_Right = False
 
@@ -852,19 +971,34 @@ class GTRI_stats:
             if incBool == Left_to_Right:
                 
                 speed = abs(0.0568182*5.09375/((df['triggerTime'].iloc[i] - df['triggerTime'].iloc[i-1])/1000000000))
-                speedArrayRL.append(speed)        
+                speedArrayRL.append(speed)
+                timeArrayRL.append(df['triggerTime'].iloc[i]/1000000000)                
         
         is_Left_to_Right = 0
+        timeArray = []
         if np.mean(np.array(speedArrayRL)) > np.mean(np.array(speedArrayLR)):
             speedArray = speedArrayRL
+            timeArray = timeArrayRL
             is_Left_to_Right = 0
         else:
             speedArray = speedArrayLR
+            timeArray = timeArrayLR
             is_Left_to_Right = 1
 
-        return np.array(speedArray), is_Left_to_Right
+        return np.array(speedArray), is_Left_to_Right, timeArray
         #plt.plot(speedArray)
         #plt.show()
+
+
+    def getSpeedLog(self,f):
+        fullPath = MASTER_FOLDER + f + '/speedLog.txt'
+        print(fullPath)
+        df = pd.read_csv(fullPath, sep='\t',header=None)
+        df = df.rename(columns={0: 'timestamp', 1: 'speed'})
+        speedArray = df['speed'].to_numpy()
+        timeArray = df['timestamp'].to_numpy()/1000000000
+        return speedArray, timeArray
+
 
     def axel_trigger_proc(self):
         #daypartArray.append(self.get_daypart(f))
@@ -883,27 +1017,46 @@ class GTRI_stats:
         folderArray = []
         daypartArray = []
         directionArray = []
+        timeArray = []
+
+        speedArrayLog = []
+        folderArrayLog = []
+        daypartArrayLog = []
+        directionArrayLog = []
+        timeArrayLog = []
+
 
         for f in dirsInFolder:
             
             try:
-                speedData, is_Left_to_Right = self.getSpeedArray(f)
+                speedData, is_Left_to_Right, timeData = self.getSpeedArray(f)
 
                 folderArray.extend([f] * len(speedData))
                 speedArray.extend(speedData)
+                timeArray.extend(timeData)
                 daypartArray.extend([self.get_daypart(f)] * len(speedData))
                 directionArray.extend([is_Left_to_Right] * len(speedData))
+                
+                #Speed Log Data
+                speedDataLog, timeDataLog = self.getSpeedLog(f)
+
+                folderArrayLog.extend([f] * len(speedDataLog))
+                speedArrayLog.extend(speedDataLog)
+                timeArrayLog.extend(timeDataLog)
+                daypartArrayLog.extend([self.get_daypart(f)] * len(speedDataLog))
+                directionArrayLog.extend([is_Left_to_Right] * len(speedDataLog))
 
             except:
                 print("Missing Speed Data")
 
 
-        #Print Stats
+        #Print Stats for 6-7
         d={
             'speed': speedArray,
             'folder': folderArray,
             'daypart': daypartArray,
-            'direction': directionArray
+            'direction': directionArray,
+            'time': timeArray
         }
 
         dfSpeed = pd.DataFrame.from_dict(d,orient='index').transpose()
@@ -911,10 +1064,28 @@ class GTRI_stats:
         #pd.set_option("display.precision", 1)
         pd.options.display.float_format = '{:.1f}'.format
         sDf = dfSpeed.groupby(['daypart','folder']).agg({'speed' : [np.size, np.mean, np.max, np.min, np.ptp],'direction' : [np.max]})
-        print('\n----------------- AXEL COUNTER DATA ---------------------')
+        print('\n----------------- AXEL COUNTER DATA (6-7) ---------------------')
         print(sDf)
+        
+        
+        #Print Stats for 6-7
+        d={
+            'speed': speedArrayLog,
+            'folder': folderArrayLog,
+            'daypart': daypartArrayLog,
+            'direction': directionArrayLog,
+            'time': timeArrayLog
+        }
 
-        return dfSpeed
+        dfSpeedLog = pd.DataFrame.from_dict(d,orient='index').transpose()
+
+        #pd.set_option("display.precision", 1)
+        pd.options.display.float_format = '{:.1f}'.format
+        sDf = dfSpeedLog.groupby(['daypart','folder']).agg({'speed' : [np.size, np.mean, np.max, np.min, np.ptp],'direction' : [np.max]})
+        print('\n----------------- AXEL COUNTER DATA (Log) ---------------------')
+        print(sDf)        
+
+        return dfSpeed, dfSpeedLog
 
 
     def single_plot(self,aeiDf,dfFPS,dfSpeed,f):
@@ -1342,13 +1513,9 @@ class GTRI_stats:
         #print(df.reset_index().pivot('folder', 'view', 'fileCnt'))
         pd.options.display.float_format = '{:.0f}'.format
         print(df.pivot_table(columns=['view'],values='triggers',index=['daypart','folder']))
-
-        return(df.pivot_table(columns=['view'],values='triggers',index=['daypart','folder']))
-
-    def file_trigger_cnt_diff(self,dfCounts,dfTriggers):
-
-        print('\n------------------------ View Counts - Triggers ------------------------')
-
+        
+        return df.pivot_table(columns=['view'],values='triggers',index=['daypart','folder'])
+        
     def uptime_plots(self,dfFPS):
 
         print('\n------------------------ PLOTS OF UPTIME ------------------------')
@@ -1357,7 +1524,7 @@ class GTRI_stats:
         sns.set()
         sns.set(font_scale=0.8)
         plt.rcParams["figure.figsize"] = (15,8)
-        fig, axes = plt.subplots(2, 2)
+        fig, axes = plt.subplots(3, 3)
 
         colorDict = {
         "Brake_lower": "b",
@@ -1373,10 +1540,10 @@ class GTRI_stats:
         }
 
         axCnt = 0
-        for f in dfFPS['folder'].unique()[-4:]:
+        for f in dfFPS['folder'].unique()[-9:]:
             
             axCnt = axCnt + 1 
-            axLive = plt.subplot(2, 2, axCnt)
+            axLive = plt.subplot(3, 3, axCnt)
             axLive.set(ylim=(0, 11))
             axLive.grid(axis='y')
             axLive.set(yticklabels=[])
@@ -1387,10 +1554,12 @@ class GTRI_stats:
             #print("Duration: ", duration.total_seconds())
 
             xformatter = mdates.DateFormatter('%H:%M')
-            if duration.total_seconds() < 5*60:
-                xlocator = mdates.MinuteLocator(interval = 1)
-            else:
-                xlocator = mdates.MinuteLocator(interval = 5)
+            #if duration.total_seconds() < 5*60:
+            #    xlocator = mdates.MinuteLocator(interval = 1)
+            #else:
+            #    xlocator = mdates.MinuteLocator(interval = 5)
+            
+            xlocator = mdates.MinuteLocator(interval = 1)
             axLive.xaxis.set_major_locator(xlocator)
             axLive.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             #axLive.legend([],[], frameon=False)
@@ -1401,7 +1570,7 @@ class GTRI_stats:
             
                 yStart = yStart + 1
                 select = (dfFPS['folder'] == f) & (dfFPS['view'] == view)
-                subDfFPS = dfFPS[select]
+                subDfFPS = dfFPS[select].iloc[10:]
 
                 if len(subDfFPS) > 0:
                     pass
@@ -1432,7 +1601,8 @@ class GTRI_stats:
         plt.tight_layout()
         plt.show()
 
-    def drop_plots(self,dfFPS):
+
+    def drop_plots(self,dfFPS,dfSpeed):
         
         trigLogNameList = ['isoTsCamTrigger.txt','ucIsoTsCamTrigger.txt','brakeTrigger.txt','crosskeyTrigger.txt','truckTrigger.txt']
         colorDict = {
@@ -1453,7 +1623,7 @@ class GTRI_stats:
         sns.set()
         sns.set(font_scale=0.8)
         plt.rcParams["figure.figsize"] = (15,8)
-        fig, axes = plt.subplots(2, 2)
+        fig, axes = plt.subplots(3, 3)
 
         axCnt = 0
 
@@ -1463,13 +1633,13 @@ class GTRI_stats:
 
         #Loop Through All folders, if aei file, then add to array
 
-        for f in dirsInFolder[-4:]:
+        for f in dirsInFolder[-9:]:
 
             if f in FOLDER_IGNORE_LIST:
                 continue
 
             axCnt = axCnt + 1 
-            axLive = plt.subplot(2, 2, axCnt)
+            axLive = plt.subplot(3, 3, axCnt)
 
             select = dfFPS['folder'] == f
             subDfFPS = dfFPS[select]
@@ -1487,9 +1657,12 @@ class GTRI_stats:
                 
                 #print(view,len(sdf),sum(select))
                 
-                fileTimes = pd.to_datetime(sdf['datetime']).to_numpy().astype(datetime).astype(float) + 5*60*60*1000000000
-                trigLogPath = MASTER_FOLDER + f + '/' + trigLogNameList[trigger_dict[view]]
-                trigTimes = np.loadtxt(trigLogPath)
+                try:
+                    fileTimes = pd.to_datetime(sdf['datetime']).to_numpy().astype(datetime).astype(float) + 5*60*60*1000000000
+                    trigLogPath = MASTER_FOLDER + f + '/' + trigLogNameList[trigger_dict[view]]
+                    trigTimes = np.loadtxt(trigLogPath)
+                except:
+                    continue
                 
                 #print(trigLogPath)
                 #print(view,len(sdf),sum(select),len(trigTimes))
@@ -1513,10 +1686,144 @@ class GTRI_stats:
                 axLive.legend(loc='upper left')
                 #axLive.legend([],[], frameon=False)
                 axLive.yaxis.label.set_text('Cumulative Dropped Frames')
-
+            
+            
+            #Plot SpeedArray
+            ax2 = axLive.twinx()
+            ax2.set(ylim=(0, 40))
+            select = dfSpeed['folder'] == f
+            subDfSpeed = dfSpeed[select]
+            #print(np.median(allTimes)/1000000000)
+            #print(np.median(subDfSpeed['time'].to_numpy())/1000000000)
+            #offset = np.median(allTimes)/1000000000 - np.median(subDfSpeed['time'].to_numpy())/1000000000
+            #print("Offset: ", offset/60/60, " hours")                    
+            #sns.lineplot(x=subDfSpeed['time'].iloc[10:-10], y=subDfSpeed['speed'].iloc[10:-10], color="k",ax=ax2,zorder=100,linestyle='--')
+            sns.lineplot(x=subDfSpeed['time'].iloc[0:], y=subDfSpeed['speed'].iloc[0:], color="k",ax=ax2,label='speed',zorder=100,linestyle='--')
+            ax2.grid(False)
+            
         plt.tight_layout()
         plt.show()
 
+
+    def fps_compare(self,dfFPS,dfSpeed):
+        
+        trigLogNameList = ['isoTsCamTrigger.txt','ucIsoTsCamTrigger.txt','brakeTrigger.txt','crosskeyTrigger.txt','truckTrigger.txt']
+        # colorDict = {
+        # "Brake_lower": "b",
+        # "Brake_upper": "b",
+        # "Isometric": "g",
+        # "UC_isometric": "r",
+        # "crosskey":"c",
+        # "ls_truck": "y",
+        # "side_bottom": "k",
+        # "side_top": "k",
+        # "truck": "m",
+        # "under_up": "r"
+        # }   
+
+        colorDict = {
+        "Isometric": "g",
+        "UC_isometric": "r",
+        "under_up": "r"
+        } 
+
+        colorDict = {
+        "Isometric": "g",
+        "UC_isometric": "r"
+        } 
+        
+        print('\n------------------------ PLOTS OF FPS COMPARISON ------------------------')
+        palette = itertools.cycle(sns.color_palette())
+        pd.options.mode.chained_assignment = None
+        sns.set()
+        sns.set(font_scale=0.8)
+        plt.rcParams["figure.figsize"] = (15,8)
+        fig, axes = plt.subplots(3, 3)
+
+        axCnt = 0
+
+        dirsInFolder = [name for name in os.listdir(MASTER_FOLDER) if os.path.isdir(os.path.join(MASTER_FOLDER, name))]
+        dirsInFolder = [d for d in dirsInFolder if not d[0] == '.']
+        dirsInFolder = [name for name in dirsInFolder if name not in FOLDER_IGNORE_LIST]
+
+        #Loop Through All folders, if aei file, then add to array
+
+        for f in dirsInFolder[-9:]:
+
+            if f in FOLDER_IGNORE_LIST:
+                continue
+
+            axCnt = axCnt + 1 
+            axLive = plt.subplot(3, 3, axCnt)
+
+            select = dfFPS['folder'] == f
+            subDfFPS = dfFPS[select]
+            
+            print("FOLDER: ", f, len(subDfFPS))
+
+            for view in subDfFPS['view'].unique():
+
+                #print(view)
+                if trigger_dict[view] < 0:
+                    continue
+
+                if view not in colorDict.keys():
+                    continue
+
+                select = (subDfFPS['folder'] == f) & (subDfFPS['view'] == view)
+                sdf = subDfFPS[select]
+                
+                #print(view,len(sdf),sum(select))
+                
+                try:
+                    fileTimes = pd.to_datetime(sdf['datetime']).to_numpy().astype(datetime).astype(float) + 5*60*60*1000000000
+                    trigLogPath = MASTER_FOLDER + f + '/' + trigLogNameList[trigger_dict[view]]
+                    trigTimes = np.loadtxt(trigLogPath)
+                except:
+                    continue
+                
+                #print(trigLogPath)
+                #print(view,len(sdf),sum(select),len(trigTimes))
+                
+                allTimes = np.sort(np.concatenate((fileTimes,trigTimes)))
+
+                diffCnt = []
+                cumTrig = []
+                cumFiles = []
+
+                for t in allTimes:
+
+                    diffCnt.append(np.sum(trigTimes<t) - np.sum(fileTimes<t))
+                    cumTrig.append(np.sum(trigTimes<t))
+                    cumFiles.append(np.sum(fileTimes<t))
+                
+
+                #sns.lineplot(x = (allTimes[10:]/1000000000).astype(float),y = diffCnt[10:],color=colorDict[view],label=view).set(title=f)
+                sns.lineplot(x = (trigTimes[11:]/1000000000).astype(float),y = 1000000000/np.diff(trigTimes[10:]),color=colorDict[view],label=view).set(title=f)
+                sns.lineplot(x = (fileTimes[11:]/1000000000).astype(float),y = 1000000000/np.diff(fileTimes[10:]),color=colorDict[view],label=view,alpha=0.3).set(title=f)
+                #Plot Filename FPS
+                
+                
+                axLive.legend(loc='upper left')
+                #axLive.legend([],[], frameon=False)
+                axLive.yaxis.label.set_text('FPS')
+            
+            
+            #Plot SpeedArray
+            ax2 = axLive.twinx()
+            ax2.set(ylim=(0, 40))
+            select = dfSpeed['folder'] == f
+            subDfSpeed = dfSpeed[select]
+            #print(np.median(allTimes)/1000000000)
+            #print(np.median(subDfSpeed['time'].to_numpy())/1000000000)
+            #offset = np.median(allTimes)/1000000000 - np.median(subDfSpeed['time'].to_numpy())/1000000000
+            #print("Offset: ", offset/60/60, " hours")                    
+            #sns.lineplot(x=subDfSpeed['time'].iloc[10:-10], y=subDfSpeed['speed'].iloc[10:-10], color="k",ax=ax2,zorder=100,linestyle='--')
+            sns.lineplot(x=subDfSpeed['time'].iloc[0:], y=subDfSpeed['speed'].iloc[0:], color="k",ax=ax2,label='speed',zorder=100,linestyle='--')
+            ax2.grid(False)
+            
+        plt.tight_layout()
+        plt.show()
 
     def run(self):
 
@@ -1524,26 +1831,35 @@ class GTRI_stats:
         #self.sample_images('C:/Users/KSH06/Desktop/2022-09-07/Train_2022_08_29_22_31/side_bottom/',10,'C:/Users/KSH06/Desktop/test2/')
         #print(trigger_dict['Isometric'])
 
-        #self.uptime_plots()
+        dfTriggers = self.get_trigger_counts()
 
-        # dfTriggers = self.get_trigger_counts()
-
-        # self.get_mosiacs_stats()
-        # aeiDf = self.aei_stats()
-        # dfSpeed = self.axel_trigger_proc()
+        self.get_mosiacs_stats()
+        aeiDf = self.aei_stats()
+        dfSpeed, dfSpeedLog = self.axel_trigger_proc()
         dfFPS, dfCounts = self.file_count_stats()
-
-        self.uptime_plots(dfFPS)
-
-        # #print('\n------------------------ View Counts - Triggers ------------------------')
-        # #print(dfCounts.reset_index(level=0).sub(dfTriggers.reset_index(level=0)))
-        # self.file_trigger_cnt_diff(dfCounts,dfTriggers)
         
-        # self.get_dropped_frame_stats(dfCounts)
-        # self.get_image_stats_per_car(aeiDf,dfCounts)
+        #dfFPS.to_csv('X:/fps.csv', index=False)
+        
+        #self.plot_FPS_train(aeiDf,dfFPS,dfSpeed,dfSpeedLog,'Train_2022_12_05_14_57')
+        self.plot_FPS_train(aeiDf,dfFPS,dfSpeed,dfSpeedLog,'Train_2022_12_04_18_56')
+        
+        self.fps_compare(dfFPS,dfSpeed)
+        self.drop_plots(dfFPS,dfSpeed)
+        self.uptime_plots(dfFPS)
+        
+        #print(dfTriggers)
+        #print(dfCounts)
+        
+        print('\n------------------------ Dropped Frame Estimates (Triggers - View Counts) ------------------------')
+        pd.options.display.float_format = '{:.0f}'.format
+        dfCntPivot = dfCounts.pivot_table(columns='view',values='fileCnt',index=['daypart','folder'])
+        print(dfTriggers - dfCntPivot)
+        
+        self.get_dropped_frame_stats(dfCounts)
+        self.get_image_stats_per_car(aeiDf,dfCounts)
 
         #-------- Plotting --------
-        # #self.plot_FPS(aeiDf,dfFPS,dfSpeed)
+        self.plot_FPS(aeiDf,dfFPS,dfSpeed)
         # self.buildPDF(aeiDf,dfFPS,dfSpeed,dfCounts)
 
         #-------- Depricated Stats --------
